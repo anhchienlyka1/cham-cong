@@ -6,7 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../attendance/presentation/bloc/attendance_bloc.dart';
 import '../../../attendance/presentation/bloc/attendance_event.dart';
 import '../../../attendance/presentation/pages/attendance_home_page.dart';
-import '../../../attendance/presentation/pages/attendance_history_page.dart';
+import '../../../attendance/presentation/pages/attendance_stats_page.dart';
 import '../../../profile/presentation/pages/profile_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -26,9 +26,9 @@ class _HomePageState extends State<HomePage> {
       label: 'TRANG CHỦ',
     ),
     _NavItem(
-      icon: Icons.access_time_outlined,
-      activeIcon: Icons.access_time_filled_rounded,
-      label: 'LỊCH SỬ',
+      icon: Icons.bar_chart_outlined,
+      activeIcon: Icons.bar_chart_rounded,
+      label: 'THỐNG KÊ',
     ),
     _NavItem(
       icon: Icons.person_outline_rounded,
@@ -55,7 +55,7 @@ class _HomePageState extends State<HomePage> {
           index: _currentIndex,
           children: const [
             AttendanceHomePage(),
-            AttendanceHistoryPage(),
+            AttendanceStatsPage(),
             ProfilePage(),
           ],
         ),

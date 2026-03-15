@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 import '../../domain/entities/attendance_record.dart';
 import '../../domain/repositories/attendance_repository.dart';
+import '../../domain/utils/shift_parser.dart';
+import '../../domain/utils/work_hours_calculator.dart';
 import '../models/attendance_record_model.dart';
 
 /// Firestore implementation của [AttendanceRepository].
@@ -90,6 +93,7 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
       location: location,
       status: status,
       lateReason: lateReason,
+      isLateFlag: status == AttendanceStatus.late,
     );
 
     final ref = await _records(userId).add(model.toFirestore());
@@ -114,15 +118,21 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
     final checkInTime = existing.checkIn;
     double? hours;
     if (checkInTime != null) {
-      final totalMin = time.difference(checkInTime).inMinutes - 90; // trừ 90 phút nghỉ
-      hours = totalMin / 60.0;
+      hours = WorkHoursCalculator.calculate(checkInTime, time);
     }
 
     final updates = <String, dynamic>{
       'checkOut': Timestamp.fromDate(time),
-      if (hours != null) 'hoursWorked': hours,
-      if (earlyLeaveReason != null) 'earlyLeaveReason': earlyLeaveReason,
+      'hoursWorked': ?hours,
+      'earlyLeaveReason': ?earlyLeaveReason,
     };
+
+    // Nếu có earlyLeaveReason → là về sớm, cập nhật status
+    if (earlyLeaveReason != null) {
+      updates['status'] = 'earlyLeave';
+      updates['isEarlyLeaveFlag'] = true;
+    }
+
     await ref.update(updates);
 
     final updated = await ref.get();
@@ -137,6 +147,10 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
     required String recordId,
     DateTime? checkIn,
     DateTime? checkOut,
+    String? lateReason,
+    String? earlyLeaveReason,
+    TimeOfDay shiftStart = const TimeOfDay(hour: 8, minute: 30),
+    TimeOfDay shiftEnd = const TimeOfDay(hour: 17, minute: 30),
   }) async {
     final ref = _records(userId).doc(recordId);
     final snap = await ref.get();
@@ -144,20 +158,49 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
 
     final newCheckIn = checkIn ?? existing.checkIn;
     final newCheckOut = checkOut ?? existing.checkOut;
+
+    // Tính lại hoursWorked
     double? hours;
     if (newCheckIn != null && newCheckOut != null) {
-      final totalMin = newCheckOut.difference(newCheckIn).inMinutes - 90;
-      hours = totalMin / 60.0;
+      hours = WorkHoursCalculator.calculate(newCheckIn, newCheckOut);
     }
+
+    // Tính lại status flags dựa trên shift
+    final isLate = ShiftParser.isLate(newCheckIn, shiftStart);
+    final isEarly = ShiftParser.isEarlyLeave(newCheckOut, shiftEnd);
+    final primaryStatus = ShiftParser.calculatePrimaryStatus(
+      checkIn: newCheckIn,
+      checkOut: newCheckOut,
+      shiftStart: shiftStart,
+      shiftEnd: shiftEnd,
+    );
 
     final updates = <String, dynamic>{
       if (checkIn != null) 'checkIn': Timestamp.fromDate(checkIn),
       if (checkOut != null) 'checkOut': Timestamp.fromDate(checkOut),
-      if (hours != null) 'hoursWorked': hours,
+      'hoursWorked': ?hours,
+      'status': primaryStatus,
+      'isLateFlag': isLate,
+      'isEarlyLeaveFlag': isEarly,
     };
+
+    // Cập nhật lý do (cho phép xóa bằng cách truyền null)
+    if (isLate && lateReason != null) {
+      updates['lateReason'] = lateReason;
+    } else if (!isLate) {
+      updates['lateReason'] = FieldValue.delete();
+    }
+
+    if (isEarly && earlyLeaveReason != null) {
+      updates['earlyLeaveReason'] = earlyLeaveReason;
+    } else if (!isEarly) {
+      updates['earlyLeaveReason'] = FieldValue.delete();
+    }
+
     await ref.update(updates);
 
     final updated = await ref.get();
     return AttendanceRecordModel.fromDoc(updated);
   }
 }
+

@@ -1,4 +1,5 @@
 import '../../domain/entities/attendance_record.dart';
+import '../../domain/utils/work_hours_calculator.dart';
 
 enum AttendancePageStatus { initial, loading, loaded, error }
 
@@ -56,7 +57,7 @@ class AttendanceState {
     return (hours / 8.0).clamp(0.0, 1.0);
   }
 
-  /// Trả về '--' khi chưa checkout, có giá trị khi đã checkout hoặc đang tính thử real-time.
+  /// Trả về '--' khi chưa checkin, có giá trị khi đã checkout hoặc đang tính thử real-time.
   String get formattedTotalHours {
     final hours = _effectiveHoursWorked;
     if (hours == null) return '--';
@@ -68,9 +69,20 @@ class AttendanceState {
   /// Số giờ thực tế: nếu có hoursWorked thì dùng, nếu đang làm việc (checkIn nhưng chưa checkOut) thì tính real-time.
   double? get _effectiveHoursWorked {
     if (todayRecord == null || todayRecord!.checkIn == null) return null;
+
+    // Nếu đã có hoursWorked (đã checkout) → dùng luôn
     if (todayRecord!.hoursWorked != null) return todayRecord!.hoursWorked;
-    // Đang làm việc: tính giờ tạm thời, trừ 1.5h (90 phút) nghỉ trưa
-    final totalMin = DateTime.now().difference(todayRecord!.checkIn!).inMinutes;
-    return (totalMin - 90) / 60.0;
+
+    // Đang làm việc: chỉ tính real-time nếu checkIn là ngày hôm nay
+    final now = DateTime.now();
+    final checkIn = todayRecord!.checkIn!;
+    final isSameDay = checkIn.year == now.year &&
+        checkIn.month == now.month &&
+        checkIn.day == now.day;
+
+    if (!isSameDay) return null; // Bản ghi cũ, không tính real-time
+
+    final result = WorkHoursCalculator.calculate(checkIn, now);
+    return result < 0 ? 0 : result; // Đảm bảo không âm
   }
 }

@@ -28,8 +28,30 @@ class FirebaseAuthRepositoryImpl implements AuthRepository {
     required String password,
   }) async {
     try {
+      // Nếu không phải email (không chứa @), tra cứu username trên Firestore
+      String loginEmail = email;
+      if (!email.contains('@')) {
+        final querySnapshot = await _db
+            .collection('users')
+            .where('username', isEqualTo: email)
+            .limit(1)
+            .get();
+
+        if (querySnapshot.docs.isEmpty) {
+          return const Left(
+              ServerFailure(message: 'Tên đăng nhập không tồn tại.'));
+        }
+
+        final userData = querySnapshot.docs.first.data();
+        loginEmail = userData['email'] as String? ?? '';
+        if (loginEmail.isEmpty) {
+          return const Left(ServerFailure(
+              message: 'Tài khoản này chưa có email liên kết.'));
+        }
+      }
+
       final credential = await _auth.signInWithEmailAndPassword(
-        email: email,
+        email: loginEmail,
         password: password,
       );
       final user = await _userFromFirebase(credential.user!);
@@ -61,6 +83,11 @@ class FirebaseAuthRepositoryImpl implements AuthRepository {
       await _db.collection('users').doc(fbUser.uid).set({
         'email': email,
         'fullName': fullName,
+        'phoneNumber': null,
+        'employeeId': null,
+        'department': null,
+        'position': null,
+        'workLocation': null,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -116,6 +143,12 @@ class FirebaseAuthRepositoryImpl implements AuthRepository {
   Future<UserEntity> _userFromFirebase(fb.User fbUser) async {
     String fullName = fbUser.displayName ?? '';
     String? phoneNumber = fbUser.phoneNumber;
+    String? employeeId;
+    String? department;
+    String? position;
+    String? workLocation;
+    String? shift;
+    DateTime? createdAt;
 
     // Lấy thêm thông tin từ Firestore nếu có
     try {
@@ -124,6 +157,15 @@ class FirebaseAuthRepositoryImpl implements AuthRepository {
         final data = doc.data()!;
         fullName = (data['fullName'] as String?) ?? fullName;
         phoneNumber = (data['phoneNumber'] as String?) ?? phoneNumber;
+        employeeId = data['employeeId'] as String?;
+        department = data['department'] as String?;
+        position = data['position'] as String?;
+        workLocation = data['workLocation'] as String?;
+        shift = data['shift'] as String?;
+        final ts = data['createdAt'];
+        if (ts is Timestamp) {
+          createdAt = ts.toDate();
+        }
       }
     } catch (_) {
       // Bỏ qua lỗi đọc Firestore, dùng data từ FirebaseAuth
@@ -135,6 +177,12 @@ class FirebaseAuthRepositoryImpl implements AuthRepository {
       fullName: fullName,
       avatarUrl: fbUser.photoURL,
       phoneNumber: phoneNumber,
+      employeeId: employeeId,
+      department: department,
+      position: position,
+      workLocation: workLocation,
+      shift: shift,
+      createdAt: createdAt,
     );
   }
 

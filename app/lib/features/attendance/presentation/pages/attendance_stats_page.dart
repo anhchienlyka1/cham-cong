@@ -37,36 +37,34 @@ class _AttendanceStatsPageState extends State<AttendanceStatsPage> {
       child: BlocBuilder<AttendanceBloc, AttendanceState>(
         builder: (context, state) {
           final records = _recordsForMonth(state);
-          return _EdgeSwipeBack(
-            child: Scaffold(
-              backgroundColor: const Color(0xFFF07030),
-              body: CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: _buildHeader(context),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF9FAFB),
-                        borderRadius:
-                            BorderRadius.vertical(top: Radius.circular(28)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 20),
-                          _CalendarHeatmap(month: _month, records: records),
-                          const SizedBox(height: 20),
-                          _DayList(records: records),
-                          const SizedBox(height: 32),
-                        ],
-                      ),
+          return Scaffold(
+            backgroundColor: const Color(0xFFF07030),
+            body: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _buildHeader(context),
+                ),
+                SliverToBoxAdapter(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF9FAFB),
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(28)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 20),
+                        _CalendarHeatmap(month: _month, records: records),
+                        const SizedBox(height: 20),
+                        _DayList(records: records),
+                        const SizedBox(height: 32),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           );
         },
@@ -140,10 +138,20 @@ class _AttendanceStatsPageState extends State<AttendanceStatsPage> {
   }
 
   /// Ghép history + todayRecord, lọc theo tháng đang xem.
+  /// Tránh trùng lặp: chỉ thêm todayRecord nếu chưa tồn tại trong history.
   List<AttendanceRecord> _recordsForMonth(AttendanceState state) {
     final all = <AttendanceRecord>[];
-    if (state.todayRecord != null) all.add(state.todayRecord!);
+
+    // Thêm tất cả history trước
     all.addAll(state.history);
+
+    // Chỉ thêm todayRecord nếu ID chưa có trong history
+    if (state.todayRecord != null) {
+      final alreadyExists = all.any((r) => r.id == state.todayRecord!.id);
+      if (!alreadyExists) {
+        all.add(state.todayRecord!);
+      }
+    }
 
     return all.where((r) {
       return r.date.year == _month.year && r.date.month == _month.month;
@@ -221,13 +229,6 @@ class _CalendarHeatmap extends StatelessWidget {
                     color: Color(0xFF6B7280),
                   ),
                 ),
-                const Spacer(),
-                // Legend
-                _LegendDot(color: const Color(0xFF22C55E), label: 'Đúng giờ'),
-                const SizedBox(width: 8),
-                _LegendDot(color: const Color(0xFFF59E0B), label: 'Muộn'),
-                const SizedBox(width: 8),
-                _LegendDot(color: const Color(0xFFEF4444), label: 'Vắng'),
               ],
             ),
             const SizedBox(height: 12),
@@ -269,8 +270,62 @@ class _CalendarHeatmap extends StatelessWidget {
                       .isAfter(DateTime(today.year, today.month, today.day));
                   final status = dayMap[dayNum];
 
+                  // ── Weekend (ngày nghỉ theo quy định) ──
+                  if (isWeekend) {
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: AspectRatio(
+                          aspectRatio: 1,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE2E8F0),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFF94A3B8).withValues(alpha: 0.5),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Text(
+                                  '$dayNum',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                ),
+                                // Small "day off" indicator at top-right
+                                Positioned(
+                                  top: 1,
+                                  right: 1,
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF94A3B8),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.nightlight_round,
+                                      size: 7,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  // ── Weekday ──
                   Color circleColor;
-                  if (isFuture || isWeekend) {
+                  if (isFuture) {
                     circleColor = const Color(0xFFE5E7EB);
                   } else if (status == AttendanceStatus.present) {
                     circleColor = const Color(0xFF22C55E);
@@ -278,8 +333,22 @@ class _CalendarHeatmap extends StatelessWidget {
                     circleColor = const Color(0xFFF59E0B);
                   } else if (status == AttendanceStatus.absent) {
                     circleColor = const Color(0xFFEF4444);
-                  } else if (status == AttendanceStatus.onLeave) {
+                  } else if (status == AttendanceStatus.earlyLeave) {
                     circleColor = const Color(0xFF3B82F6);
+                  } else if (status == AttendanceStatus.onLeave) {
+                    circleColor = const Color(0xFF06B6D4);
+                  } else if (status == AttendanceStatus.sickLeave) {
+                    circleColor = const Color(0xFFF97316);
+                  } else if (status == AttendanceStatus.businessTrip) {
+                    circleColor = const Color(0xFF78716C);
+                  } else if (status == AttendanceStatus.workFromHome) {
+                    circleColor = const Color(0xFF10B981);
+                  } else if (status == AttendanceStatus.holiday) {
+                    circleColor = const Color(0xFFF43F5E);
+                  } else if (status == AttendanceStatus.overtime) {
+                    circleColor = const Color(0xFF7C3AED);
+                  } else if (status == AttendanceStatus.forgotPunch) {
+                    circleColor = const Color(0xFF6B7280);
                   } else {
                     // Weekday without record
                     circleColor = const Color(0xFFE5E7EB);
@@ -301,7 +370,7 @@ class _CalendarHeatmap extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
-                                color: (isFuture || isWeekend || status == null)
+                                color: (isFuture || status == null)
                                     ? const Color(0xFF9CA3AF)
                                     : Colors.white,
                               ),
@@ -322,29 +391,8 @@ class _CalendarHeatmap extends StatelessWidget {
   }
 }
 
-class _LegendDot extends StatelessWidget {
-  final Color color;
-  final String label;
-  const _LegendDot({required this.color, required this.label});
 
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 3),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 10, color: Color(0xFF6B7280)),
-        ),
-      ],
-    );
-  }
-}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Day-by-day list
@@ -439,7 +487,7 @@ class _DayTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (accentColor, badgeLabel, badgeColor) = _statusInfo(record.status);
+    final (accentColor, _, __) = _statusInfo(record.status);
 
     // Format hours like "8h 30m"
     String hoursLabel = '0h';
@@ -447,6 +495,20 @@ class _DayTile extends StatelessWidget {
       final h = record.hoursWorked!.floor();
       final m = ((record.hoursWorked! - h) * 60).round();
       hoursLabel = m > 0 ? '${h}h ${m}m' : '${h}h';
+    }
+
+    // Build list of badge widgets (supports dual badges)
+    final badges = <Widget>[];
+    if (record.isLateFlag) {
+      badges.add(_buildBadge('Muộn', const Color(0xFFF59E0B)));
+    }
+    if (record.isEarlyLeaveFlag) {
+      badges.add(_buildBadge('Về sớm', const Color(0xFF3B82F6)));
+    }
+    if (badges.isEmpty) {
+      // Fallback to primary status badge
+      final (_, badgeLabel, badgeColor) = _statusInfo(record.status);
+      badges.add(_buildBadge(badgeLabel, badgeColor));
     }
 
     return Padding(
@@ -517,7 +579,7 @@ class _DayTile extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(width: 8),
-                    // Hours
+                    // Hours + status badges
                     Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -531,24 +593,12 @@ class _DayTile extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        // Status badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: badgeColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            badgeLabel,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: badgeColor,
-                            ),
-                          ),
+                        // Dual badges row
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 2,
+                          alignment: WrapAlignment.end,
+                          children: badges,
                         ),
                       ],
                     ),
@@ -558,6 +608,24 @@ class _DayTile extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          color: color,
         ),
       ),
     );
@@ -574,7 +642,21 @@ class _DayTile extends StatelessWidget {
       case AttendanceStatus.halfDay:
         return (const Color(0xFF8B5CF6), 'Nửa ngày', const Color(0xFF8B5CF6));
       case AttendanceStatus.onLeave:
-        return (const Color(0xFF3B82F6), 'Nghỉ phép', const Color(0xFF3B82F6));
+        return (const Color(0xFF06B6D4), 'Nghỉ phép', const Color(0xFF06B6D4));
+      case AttendanceStatus.earlyLeave:
+        return (const Color(0xFF3B82F6), 'Về sớm', const Color(0xFF3B82F6));
+      case AttendanceStatus.sickLeave:
+        return (const Color(0xFFF97316), 'Nghỉ ốm', const Color(0xFFF97316));
+      case AttendanceStatus.businessTrip:
+        return (const Color(0xFF78716C), 'Công tác', const Color(0xFF78716C));
+      case AttendanceStatus.workFromHome:
+        return (const Color(0xFF10B981), 'WFH', const Color(0xFF10B981));
+      case AttendanceStatus.holiday:
+        return (const Color(0xFFF43F5E), 'Nghỉ lễ', const Color(0xFFF43F5E));
+      case AttendanceStatus.overtime:
+        return (const Color(0xFF7C3AED), 'Tăng ca', const Color(0xFF7C3AED));
+      case AttendanceStatus.forgotPunch:
+        return (const Color(0xFF6B7280), 'Quên CC', const Color(0xFF6B7280));
     }
   }
 }
@@ -604,50 +686,3 @@ class _TimeChip extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Edge Swipe Back Gesture
-// ─────────────────────────────────────────────────────────────────────────────
-class _EdgeSwipeBack extends StatefulWidget {
-  final Widget child;
-  const _EdgeSwipeBack({required this.child});
-
-  @override
-  State<_EdgeSwipeBack> createState() => _EdgeSwipeBackState();
-}
-
-class _EdgeSwipeBackState extends State<_EdgeSwipeBack> {
-  bool _isEdgeSwipe = false;
-  double _dragDistance = 0;
-
-  static const _edgeWidth = 40.0;
-  static const _dragThreshold = 80.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onHorizontalDragStart: (details) {
-        final dx = details.globalPosition.dx;
-        final screenWidth = MediaQuery.sizeOf(context).width;
-        // Detect swipe starting from left or right edge
-        _isEdgeSwipe = dx < _edgeWidth || dx > screenWidth - _edgeWidth;
-        _dragDistance = 0;
-      },
-      onHorizontalDragUpdate: (details) {
-        if (!_isEdgeSwipe) return;
-        _dragDistance += details.delta.dx.abs();
-      },
-      onHorizontalDragEnd: (details) {
-        if (!_isEdgeSwipe) return;
-        final velocity = details.primaryVelocity ?? 0;
-        // Pop if dragged enough distance or fast enough
-        if (_dragDistance > _dragThreshold || velocity.abs() > 800) {
-          HapticFeedback.lightImpact();
-          Navigator.maybePop(context);
-        }
-        _isEdgeSwipe = false;
-        _dragDistance = 0;
-      },
-      child: widget.child,
-    );
-  }
-}

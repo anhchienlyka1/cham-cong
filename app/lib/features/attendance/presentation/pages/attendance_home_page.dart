@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 import '../../../../config/themes/app_text_styles.dart';
+import '../../domain/utils/work_hours_calculator.dart';
 import '../bloc/attendance_bloc.dart';
 import '../bloc/attendance_state.dart';
 import '../bloc/attendance_event.dart';
@@ -88,23 +91,98 @@ class AttendanceHomePage extends StatelessWidget {
 
   // ── Status Card ────────────────────────────────────────────────────────────
   Widget _buildStatusCard(BuildContext context, AttendanceState state) {
+    return _LiveStatusCard(state: state);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Live Status Card – cập nhật tổng giờ và tiến độ real-time khi đang làm việc
+// ─────────────────────────────────────────────────────────────────────────────
+class _LiveStatusCard extends StatefulWidget {
+  final AttendanceState state;
+  const _LiveStatusCard({required this.state});
+
+  @override
+  State<_LiveStatusCard> createState() => _LiveStatusCardState();
+}
+
+class _LiveStatusCardState extends State<_LiveStatusCard> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimerIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveStatusCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _startTimerIfNeeded();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startTimerIfNeeded() {
+    _timer?.cancel();
+    // Chỉ chạy timer khi đang working (đã checkin, chưa checkout)
+    if (widget.state.isWorking) {
+      _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  /// Tính giờ làm việc real-time (hoặc dùng hoursWorked nếu đã checkout)
+  double? _calcHours() {
+    final record = widget.state.todayRecord;
+    if (record == null || record.checkIn == null) return null;
+
+    // Đã checkout → dùng hoursWorked
+    if (record.hoursWorked != null) return record.hoursWorked;
+
+    // Đang làm → tính real-time (chỉ nếu cùng ngày)
+    final now = DateTime.now();
+    final checkIn = record.checkIn!;
+    final isSameDay = checkIn.year == now.year &&
+        checkIn.month == now.month &&
+        checkIn.day == now.day;
+    if (!isSameDay) return null;
+
+    final result = WorkHoursCalculator.calculate(checkIn, now);
+    return result < 0 ? 0 : result;
+  }
+
+  String _formatHours(double? hours) {
+    if (hours == null) return '--';
+    final h = hours.floor();
+    final m = ((hours - h) * 60).round();
+    return '${h}h ${m.toString().padLeft(2, '0')}m';
+  }
+
+  double _calcProgress(double? hours) {
+    if (hours == null) return 0.0;
+    return (hours / 8.0).clamp(0.0, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.state;
     final now = DateTime.now();
     final monthNames = [
       '',
-      'Tháng 1',
-      'Tháng 2',
-      'Tháng 3',
-      'Tháng 4',
-      'Tháng 5',
-      'Tháng 6',
-      'Tháng 7',
-      'Tháng 8',
-      'Tháng 9',
-      'Tháng 10',
-      'Tháng 11',
-      'Tháng 12',
+      'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4',
+      'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8',
+      'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12',
     ];
     final dateLabel = '${now.day} ${monthNames[now.month]}';
+
+    final hours = _calcHours();
+    final progress = _calcProgress(hours);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -175,7 +253,7 @@ class AttendanceHomePage extends StatelessWidget {
                 ),
                 _buildTimeColumn(
                   label: 'Tổng giờ',
-                  time: state.formattedTotalHours,
+                  time: _formatHours(hours),
                   isBold: true,
                 ),
               ],
@@ -192,7 +270,7 @@ class AttendanceHomePage extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '${(state.workProgress * 100).toStringAsFixed(0)}%',
+                  '${(progress * 100).toStringAsFixed(0)}%',
                   style: AppTextStyles.caption.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -204,7 +282,7 @@ class AttendanceHomePage extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: LinearProgressIndicator(
-                value: state.workProgress,
+                value: progress,
                 minHeight: 8,
                 backgroundColor: Colors.white.withValues(alpha: 0.2),
                 valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
@@ -435,10 +513,6 @@ class _ActionZone extends StatefulWidget {
 }
 
 class _ActionZoneState extends State<_ActionZone> {
-  bool _wfhActive = false;
-  bool _leaveActive = false;
-  bool _earlyLeaveActive = false;
-
   // ── Chấm công ──────────────────────────────────────────────────────────────
   Future<void> _handleMainButton(BuildContext context) async {
     final state = widget.state;
@@ -601,7 +675,6 @@ class _ActionZoneState extends State<_ActionZone> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Khi chưa done: spacing 12 + row nút phụ ~48 = 60
         final bottomItems = isDone ? 0.0 : 60.0;
         final available = constraints.maxHeight - bottomItems;
         final btnSize = available.clamp(140.0, 200.0);
@@ -616,59 +689,7 @@ class _ActionZoneState extends State<_ActionZone> {
               onTap: () => _handleMainButton(context),
             ),
             if (!isDone) const SizedBox(height: 12),
-            if (!isDone)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _SecondaryActionButton(
-                    icon: Icons.home_work_outlined,
-                    label: 'WFH',
-                    active: _wfhActive,
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      setState(() {
-                        _wfhActive = !_wfhActive;
-                        if (_wfhActive) {
-                          _leaveActive = false;
-                          _earlyLeaveActive = false;
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  _SecondaryActionButton(
-                    icon: Icons.beach_access_outlined,
-                    label: 'Nghỉ phép',
-                    active: _leaveActive,
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      setState(() {
-                        _leaveActive = !_leaveActive;
-                        if (_leaveActive) {
-                          _wfhActive = false;
-                          _earlyLeaveActive = false;
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  _SecondaryActionButton(
-                    icon: Icons.directions_run_outlined,
-                    label: 'Về sớm',
-                    active: _earlyLeaveActive,
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      setState(() {
-                        _earlyLeaveActive = !_earlyLeaveActive;
-                        if (_earlyLeaveActive) {
-                          _wfhActive = false;
-                          _leaveActive = false;
-                        }
-                      });
-                    },
-                  ),
-                ],
-              ),
+            if (!isDone) const _LocationCard(),
           ],
         );
       },
@@ -844,59 +865,196 @@ class _MainCheckButtonState extends State<_MainCheckButton>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Secondary Action Button (WFH / Nghỉ phép / Về sớm)
+// Location Card – hiển thị vị trí GPS hiện tại
 // ─────────────────────────────────────────────────────────────────────────────
-class _SecondaryActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
+class _LocationCard extends StatefulWidget {
+  const _LocationCard();
 
-  const _SecondaryActionButton({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
+  @override
+  State<_LocationCard> createState() => _LocationCardState();
+}
+
+class _LocationCardState extends State<_LocationCard> {
+  String _address = '';
+  String _coords = '';
+  bool _loading = true;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLocation();
+  }
+
+  Future<void> _fetchLocation() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = false;
+    });
+
+    try {
+      // Check permission
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) setState(() { _error = true; _loading = false; _address = 'GPS đang tắt'; });
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (mounted) setState(() { _error = true; _loading = false; _address = 'Chưa cấp quyền vị trí'; });
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+
+      final coordsText =
+          '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
+
+      // Reverse geocoding to get address
+      String addressText = coordsText;
+      try {
+        final placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+        if (placemarks.isNotEmpty) {
+          final p = placemarks.first;
+          final parts = <String>[
+            if (p.street != null && p.street!.isNotEmpty) p.street!,
+            if (p.subLocality != null && p.subLocality!.isNotEmpty) p.subLocality!,
+            if (p.locality != null && p.locality!.isNotEmpty) p.locality!,
+            if (p.administrativeArea != null && p.administrativeArea!.isNotEmpty)
+              p.administrativeArea!,
+          ];
+          if (parts.isNotEmpty) addressText = parts.join(', ');
+        }
+      } catch (_) {
+        // Fallback to coords if geocoding fails
+      }
+
+      if (mounted) {
+        setState(() {
+          _address = addressText;
+          _coords = coordsText;
+          _loading = false;
+          _error = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = true;
+          _loading = false;
+          _address = 'Không thể lấy vị trí';
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      onTap: _fetchLocation,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: active
-              ? Colors.white.withValues(alpha: 0.30)
-              : Colors.white.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(40),
+          color: Colors.white.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: active
-                ? Colors.white.withValues(alpha: 0.7)
-                : Colors.white.withValues(alpha: 0.3),
-            width: active ? 2 : 1.5,
+            color: Colors.white.withValues(alpha: 0.28),
+            width: 1,
           ),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: Colors.white.withValues(alpha: active ? 1.0 : 0.8),
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: active ? 1.0 : 0.85),
-                fontSize: 13,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                letterSpacing: 0.2,
+            // Icon
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _error
+                    ? Colors.red.withValues(alpha: 0.25)
+                    : Colors.white.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                _error ? Icons.location_off_rounded : Icons.location_on_rounded,
+                color: Colors.white,
+                size: 20,
               ),
             ),
+            const SizedBox(width: 10),
+            // Address text
+            Expanded(
+              child: _loading
+                  ? Row(
+                      children: [
+                        SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Đang lấy vị trí...',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _address,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            height: 1.3,
+                          ),
+                        ),
+                        if (_coords.isNotEmpty && !_error) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '📍 $_coords',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+            ),
+            // Refresh indicator
+            if (!_loading)
+              Icon(
+                Icons.refresh_rounded,
+                color: Colors.white.withValues(alpha: 0.6),
+                size: 18,
+              ),
           ],
         ),
       ),
@@ -1184,6 +1342,24 @@ class _ReasonDialogState extends State<_ReasonDialog> {
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.grey[500],
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: const Text(
+                  'Hủy',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
                   ),
                 ),
               ),

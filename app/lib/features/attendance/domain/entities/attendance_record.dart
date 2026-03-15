@@ -8,6 +8,11 @@ class AttendanceRecord {
   final AttendanceStatus status;
   final String? lateReason;
   final String? earlyLeaveReason;
+  final bool isLateFlag;
+  final bool isEarlyLeaveFlag;
+  final String? leaveType;
+  final String? note;
+  final double? overtimeHours;
 
   const AttendanceRecord({
     required this.id,
@@ -19,6 +24,11 @@ class AttendanceRecord {
     this.status = AttendanceStatus.absent,
     this.lateReason,
     this.earlyLeaveReason,
+    this.isLateFlag = false,
+    this.isEarlyLeaveFlag = false,
+    this.leaveType,
+    this.note,
+    this.overtimeHours,
   });
 
   AttendanceRecord copyWith({
@@ -31,6 +41,11 @@ class AttendanceRecord {
     AttendanceStatus? status,
     String? lateReason,
     String? earlyLeaveReason,
+    bool? isLateFlag,
+    bool? isEarlyLeaveFlag,
+    String? leaveType,
+    String? note,
+    double? overtimeHours,
   }) {
     return AttendanceRecord(
       id: id ?? this.id,
@@ -42,18 +57,35 @@ class AttendanceRecord {
       status: status ?? this.status,
       lateReason: lateReason ?? this.lateReason,
       earlyLeaveReason: earlyLeaveReason ?? this.earlyLeaveReason,
+      isLateFlag: isLateFlag ?? this.isLateFlag,
+      isEarlyLeaveFlag: isEarlyLeaveFlag ?? this.isEarlyLeaveFlag,
+      leaveType: leaveType ?? this.leaveType,
+      note: note ?? this.note,
+      overtimeHours: overtimeHours ?? this.overtimeHours,
     );
   }
 
-  /// Trả về true nếu check-in muộn (sau 8:30)
+  /// Trả về true nếu ngày này là ngày đi làm thực tế (không phải nghỉ/vắng)
+  bool get isActiveWorkDay => const {
+    AttendanceStatus.present,
+    AttendanceStatus.late,
+    AttendanceStatus.earlyLeave,
+    AttendanceStatus.halfDay,
+    AttendanceStatus.overtime,
+    AttendanceStatus.workFromHome,
+  }.contains(status);
+
+  /// Trả về true nếu check-in muộn (sau 8:30 hoặc theo flag)
   bool get isLate {
+    if (isLateFlag) return true;
     if (checkIn == null) return false;
     final cutoff = DateTime(checkIn!.year, checkIn!.month, checkIn!.day, 8, 30);
     return checkIn!.isAfter(cutoff);
   }
 
-  /// Trả về true nếu check-out sớm (trước 17:30)
+  /// Trả về true nếu check-out sớm (trước 17:30 hoặc theo flag)
   bool get isEarlyLeave {
+    if (isEarlyLeaveFlag) return true;
     if (checkOut == null) return false;
     final cutoff =
         DateTime(checkOut!.year, checkOut!.month, checkOut!.day, 17, 30);
@@ -99,4 +131,11 @@ enum AttendanceStatus {
   late,
   halfDay,
   onLeave,
+  earlyLeave,
+  sickLeave,
+  businessTrip,
+  workFromHome,
+  holiday,
+  overtime,
+  forgotPunch,
 }

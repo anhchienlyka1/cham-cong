@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 import '../entities/attendance_record.dart';
 
 /// Định nghĩa contract cho Attendance data operations.
@@ -28,11 +30,16 @@ abstract class AttendanceRepository {
     String? earlyLeaveReason,
   });
 
-  /// Cập nhật giờ checkIn/checkOut của một record.
+  /// Cập nhật giờ checkIn/checkOut của một record, tự tính lại status.
   Future<AttendanceRecord> updateRecord({
     required String userId,
     required String recordId,
     DateTime? checkIn,
     DateTime? checkOut,
+    String? lateReason,
+    String? earlyLeaveReason,
+    TimeOfDay shiftStart = const TimeOfDay(hour: 8, minute: 30),
+    TimeOfDay shiftEnd = const TimeOfDay(hour: 17, minute: 30),
   });
 }
+

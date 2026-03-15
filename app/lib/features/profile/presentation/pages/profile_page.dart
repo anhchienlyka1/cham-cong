@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-import '../../../../config/routes/route_names.dart';
+
+
 import '../../../../config/themes/app_colors.dart';
 import '../../../../config/themes/app_text_styles.dart';
 import '../../../attendance/presentation/bloc/attendance_bloc.dart';
@@ -23,6 +25,25 @@ class _ProfilePageState extends State<ProfilePage> {
   // Ca làm việc: '8:00', '8:30', '9:00'
   String _selectedShift = '8:00';
 
+  /// Lưu ca làm việc lên Firestore
+  Future<void> _saveShiftToFirestore(String shift) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .update({'shift': shift});
+    } catch (e) {
+      // Nếu document chưa tồn tại, tạo mới với merge
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .set({'shift': shift}, SetOptions(merge: true));
+    }
+  }
+
   void _pickShift() {
     showModalBottomSheet(
       context: context,
@@ -31,6 +52,9 @@ class _ProfilePageState extends State<ProfilePage> {
         selected: _selectedShift,
         onPick: (v) {
           setState(() => _selectedShift = v);
+          _saveShiftToFirestore(v);
+          // Cập nhật user state trong AuthBloc
+          context.read<AuthBloc>().add(AuthShiftUpdated(shift: v));
           Navigator.pop(context);
         },
       ),
@@ -43,16 +67,37 @@ class _ProfilePageState extends State<ProfilePage> {
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: const Color(0xFFF07030),
-        body: BlocBuilder<AttendanceBloc, AttendanceState>(
-          builder: (context, attendanceState) {
-            final user = context.read<AuthBloc>().state.user;
-            return _ProfileBody(
-              state: attendanceState,
-              user: user,
-              selectedShift: _selectedShift,
-              onPickShift: _pickShift,
-            );
+        body: BlocListener<AuthBloc, AuthState>(
+          listenWhen: (prev, curr) =>
+              prev.user?.shift != curr.user?.shift,
+          listener: (context, authState) {
+            final shift = authState.user?.shift;
+            if (shift != null && shift.isNotEmpty && shift != _selectedShift) {
+              setState(() => _selectedShift = shift);
+            }
           },
+          child: BlocBuilder<AuthBloc, AuthState>(
+            builder: (context, authState) {
+              // Đồng bộ shift từ AuthBloc vào biến local (cho lần build đầu tiên)
+              final userShift = authState.user?.shift;
+              if (userShift != null && userShift.isNotEmpty && userShift != _selectedShift) {
+                // Schedule microtask để tránh setState trong build
+                Future.microtask(() {
+                  if (mounted) setState(() => _selectedShift = userShift);
+                });
+              }
+              return BlocBuilder<AttendanceBloc, AttendanceState>(
+                builder: (context, attendanceState) {
+                  return _ProfileBody(
+                    state: attendanceState,
+                    user: authState.user,
+                    selectedShift: _selectedShift,
+                    onPickShift: _pickShift,
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -101,19 +146,19 @@ class _ProfileBody extends StatelessWidget {
                       icon: Icons.badge_rounded,
                       iconColor: AppColors.primary,
                       label: 'Mã nhân viên',
-                      value: '—',
+                      value: user?.employeeId ?? '—',
                     ),
                     _InfoTile(
                       icon: Icons.business_center_rounded,
                       iconColor: AppColors.info,
                       label: 'Phòng ban',
-                      value: '—',
+                      value: user?.department ?? '—',
                     ),
                     _InfoTile(
                       icon: Icons.work_rounded,
                       iconColor: AppColors.secondary,
                       label: 'Chức vụ',
-                      value: '—',
+                      value: user?.position ?? '—',
                     ),
                     _InfoTile(
                       icon: Icons.phone_rounded,
@@ -125,7 +170,7 @@ class _ProfileBody extends StatelessWidget {
                       icon: Icons.location_on_rounded,
                       iconColor: AppColors.warning,
                       label: 'Địa điểm làm việc',
-                      value: '—',
+                      value: user?.workLocation ?? '—',
                       isLast: true,
                     ),
                   ],
@@ -368,41 +413,13 @@ class _ProfileBody extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 7),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${state.workingDays}/${state.totalWorkingDays} ngày làm việc hoàn thành  •  ${(progress * 100).toStringAsFixed(0)}%',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => context.push(RouteNames.attendanceStats),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Xem chi tiết',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(
-                        Icons.arrow_forward_ios_rounded,
-                        color: Colors.white.withValues(alpha: 0.9),
-                        size: 10,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            Text(
+              '${state.workingDays}/${state.totalWorkingDays} ngày làm việc hoàn thành  •  ${(progress * 100).toStringAsFixed(0)}%',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.8),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),

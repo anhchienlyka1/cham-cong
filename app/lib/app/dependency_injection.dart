@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../features/auth/data/repositories/auth_repository_impl.dart';
 import '../features/auth/domain/repositories/auth_repository.dart';
+import '../features/auth/domain/usecases/get_current_user_usecase.dart';
 import '../features/auth/domain/usecases/login_usecase.dart';
 import '../features/auth/domain/usecases/logout_usecase.dart';
 import '../features/auth/presentation/bloc/auth_bloc.dart';
@@ -32,11 +33,13 @@ Future<void> configureDependencies() async {
   );
   sl.registerLazySingleton(() => LoginUseCase(sl<AuthRepository>()));
   sl.registerLazySingleton(() => LogoutUseCase(sl<AuthRepository>()));
+  sl.registerLazySingleton(() => GetCurrentUserUseCase(sl<AuthRepository>()));
 
-  sl.registerFactory(
+  sl.registerLazySingleton(
     () => AuthBloc(
       loginUseCase: sl<LoginUseCase>(),
       logoutUseCase: sl<LogoutUseCase>(),
+      getCurrentUserUseCase: sl<GetCurrentUserUseCase>(),
     ),
   );
 
@@ -60,6 +63,7 @@ Future<void> configureDependencies() async {
       getHistoryUseCase: sl<GetAttendanceHistoryUseCase>(),
       getTodayRecordUseCase: sl<GetTodayRecordUseCase>(),
       updateTimeUseCase: sl<UpdateAttendanceTimeUseCase>(),
+      authBloc: sl<AuthBloc>(),
     ),
   );
 }

@@ -41,7 +41,7 @@ class AttendanceHistoryPage extends StatelessWidget {
                 Expanded(
                   child: Container(
                     decoration: const BoxDecoration(
-                      color: Color(0xFFF9FAFB),
+                      color: Color(0xFFF5F6FA),
                       borderRadius: BorderRadius.vertical(
                         top: Radius.circular(28),
                       ),
@@ -161,39 +161,7 @@ class AttendanceHistoryPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Month separator
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 10),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFF07030), AppColors.primary],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'Tháng $month/$year',
-                      style: AppTextStyles.labelMedium.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Divider(
-                      color: AppColors.divider,
-                      thickness: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _MonthSeparator(month: month, year: year, records: monthRecords),
             // Records
             ...monthRecords.map(
               (r) => _HistoryCard(
@@ -220,7 +188,79 @@ class AttendanceHistoryPage extends StatelessWidget {
   }
 }
 
+// ── Month Separator ──────────────────────────────────────────────────────────
+class _MonthSeparator extends StatelessWidget {
+  final int month;
+  final int year;
+  final List<AttendanceRecord> records;
 
+  const _MonthSeparator({
+    required this.month,
+    required this.year,
+    required this.records,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final totalDays = records.length;
+    final presentDays = records
+        .where((r) => r.isActiveWorkDay)
+        .length;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF07030), AppColors.primary],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.calendar_month_rounded,
+                    size: 14, color: Colors.white),
+                const SizedBox(width: 6),
+                Text(
+                  'Tháng $month/$year',
+                  style: AppTextStyles.labelMedium.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            '$presentDays/$totalDays ngày',
+            style: AppTextStyles.labelSmall.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Divider(color: AppColors.divider, thickness: 1),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 // ── History card ─────────────────────────────────────────────────────────────
 class _HistoryCard extends StatelessWidget {
@@ -231,209 +271,304 @@ class _HistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          splashColor: AppColors.primarySurface,
-          highlightColor: AppColors.primarySurface.withValues(alpha: 0.6),
-          child: Row(
-            children: [
-              // Left accent bar
-              Container(
-                width: 4,
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: _accentColors(record.status),
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    bottomLeft: Radius.circular(16),
-                  ),
-                ),
-              ),
+    final statusInfo = _statusInfo(record.status);
 
-              // Date badge
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Container(
-                  width: 48,
-                  height: 56,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+            BoxShadow(
+              color: statusInfo.color.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                // ── Left status strip ──────────────────────────────
+                Container(
+                  width: 5,
                   decoration: BoxDecoration(
-                    color: AppColors.primarySurface,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        record.date.day.toString(),
-                        style: AppTextStyles.h3.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w800,
-                          height: 1.1,
-                        ),
-                      ),
-                      Text(
-                        _monthShort(record.date.month),
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.primaryLight,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ],
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        statusInfo.color,
+                        statusInfo.color.withValues(alpha: 0.5),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
-              // Details
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            record.dayOfWeek,
-                            style: AppTextStyles.labelLarge.copyWith(
-                              color: AppColors.textPrimary,
+                // ── Main content ───────────────────────────────────
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Top row: date info + status badge
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Day number with weekday
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      record.dayOfWeek,
+                                      style: AppTextStyles.labelLarge.copyWith(
+                                        color: AppColors.textPrimary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 9, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF3F4F6),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '${record.date.day}/${record.date.month}',
+                                        style:
+                                            AppTextStyles.labelSmall.copyWith(
+                                          color: AppColors.textSecondary,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
+                            const Spacer(),
+                            // Status badge
+                            _StatusBadge(status: record.status),
+                          ],
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Bottom row: time info + total hours
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8F9FC),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          const Spacer(),
-                          _StatusBadge(status: record.status),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          _TimeChip(
-                            icon: Icons.login_rounded,
-                            time: record.formattedCheckIn,
-                            color: AppColors.success,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            child: Icon(
-                              Icons.arrow_forward_rounded,
-                              size: 12,
-                              color: AppColors.textHint,
-                            ),
-                          ),
-                          _TimeChip(
-                            icon: Icons.logout_rounded,
-                            time: record.formattedCheckOut,
-                            color: AppColors.error,
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primarySurface,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              record.formattedHours,
-                              style: AppTextStyles.labelSmall.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
+                          child: Row(
+                            children: [
+                              // Check in
+                              _TimeBlock(
+                                label: 'Vào',
+                                time: record.formattedCheckIn,
+                                icon: Icons.login_rounded,
+                                iconColor: AppColors.success,
                               ),
-                            ),
+
+                              // Divider/Arrow
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: List.generate(
+                                        5,
+                                        (index) => Container(
+                                          width: 5,
+                                          height: 2,
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.textHint
+                                                .withValues(alpha: 0.6),
+                                            borderRadius:
+                                                BorderRadius.circular(1),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Icon(
+                                      Icons.arrow_forward_rounded,
+                                      size: 10,
+                                      color: AppColors.textHint
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Check out
+                              _TimeBlock(
+                                label: 'Ra',
+                                time: record.formattedCheckOut,
+                                icon: Icons.logout_rounded,
+                                iconColor: AppColors.error,
+                                alignRight: true,
+                              ),
+
+                              // Vertical divider
+                              Container(
+                                width: 1,
+                                height: 32,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                color: AppColors.divider,
+                              ),
+
+                              // Total hours
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Tổng',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    record.formattedHours,
+                                    style: AppTextStyles.labelLarge.copyWith(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
-              // Chevron
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.textHint,
-                  size: 20,
+                // ── Chevron ────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.textHint,
+                    size: 20,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  List<Color> _accentColors(AttendanceStatus status) {
+  _StatusInfo _statusInfo(AttendanceStatus status) {
     switch (status) {
       case AttendanceStatus.present:
-        return [AppColors.success, Color(0xFF6EE7B7)];
+        return _StatusInfo(AppColors.success);
       case AttendanceStatus.late:
-        return [AppColors.warning, Color(0xFFFDE68A)];
+        return _StatusInfo(AppColors.warning);
       case AttendanceStatus.absent:
-        return [AppColors.error, Color(0xFFFCA5A5)];
+        return _StatusInfo(AppColors.error);
       case AttendanceStatus.halfDay:
-        return [AppColors.info, Color(0xFF93C5FD)];
+        return _StatusInfo(AppColors.info);
       case AttendanceStatus.onLeave:
-        return [AppColors.secondary, Color(0xFFC4B5FD)];
+        return _StatusInfo(const Color(0xFF06B6D4));
+      case AttendanceStatus.earlyLeave:
+        return _StatusInfo(const Color(0xFF3B82F6));
+      case AttendanceStatus.sickLeave:
+        return _StatusInfo(const Color(0xFFF97316));
+      case AttendanceStatus.businessTrip:
+        return _StatusInfo(const Color(0xFF78716C));
+      case AttendanceStatus.workFromHome:
+        return _StatusInfo(const Color(0xFF10B981));
+      case AttendanceStatus.holiday:
+        return _StatusInfo(const Color(0xFFF43F5E));
+      case AttendanceStatus.overtime:
+        return _StatusInfo(const Color(0xFF7C3AED));
+      case AttendanceStatus.forgotPunch:
+        return _StatusInfo(const Color(0xFF6B7280));
     }
-  }
-
-  String _monthShort(int month) {
-    const months = [
-      'Th1', 'Th2', 'Th3', 'Th4', 'Th5', 'Th6',
-      'Th7', 'Th8', 'Th9', 'Th10', 'Th11', 'Th12',
-    ];
-    return months[month - 1];
   }
 }
 
-// ── Time chip ────────────────────────────────────────────────────────────────
-class _TimeChip extends StatelessWidget {
-  final IconData icon;
-  final String time;
+class _StatusInfo {
   final Color color;
+  const _StatusInfo(this.color);
+}
 
-  const _TimeChip({
-    required this.icon,
+// ── Time block ───────────────────────────────────────────────────────────────
+class _TimeBlock extends StatelessWidget {
+  final String label;
+  final String time;
+  final IconData icon;
+  final Color iconColor;
+  final bool alignRight;
+
+  const _TimeBlock({
+    required this.label,
     required this.time,
-    required this.color,
+    required this.icon,
+    required this.iconColor,
+    this.alignRight = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Column(
+      crossAxisAlignment:
+          alignRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 3),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!alignRight) ...[
+              Icon(icon, size: 14, color: iconColor),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            if (alignRight) ...[
+              const SizedBox(width: 5),
+              Icon(icon, size: 14, color: iconColor),
+            ],
+          ],
+        ),
+        const SizedBox(height: 3),
         Text(
           time,
-          style: AppTextStyles.bodySmall.copyWith(
+          style: AppTextStyles.labelLarge.copyWith(
             color: AppColors.textPrimary,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
           ),
         ),
       ],
@@ -480,16 +615,57 @@ class _StatusBadge extends StatelessWidget {
         icon = Icons.timelapse_rounded;
         break;
       case AttendanceStatus.onLeave:
-        bg = AppColors.secondary.withValues(alpha: 0.12);
-        fg = AppColors.secondary;
+        bg = const Color(0xFF06B6D4).withValues(alpha: 0.12);
+        fg = const Color(0xFF06B6D4);
         label = 'Nghỉ phép';
         icon = Icons.beach_access_rounded;
+        break;
+      case AttendanceStatus.earlyLeave:
+        bg = const Color(0xFF3B82F6).withValues(alpha: 0.12);
+        fg = const Color(0xFF3B82F6);
+        label = 'Về sớm';
+        icon = Icons.directions_run_rounded;
+        break;
+      case AttendanceStatus.sickLeave:
+        bg = const Color(0xFFF97316).withValues(alpha: 0.12);
+        fg = const Color(0xFFF97316);
+        label = 'Nghỉ ốm';
+        icon = Icons.local_hospital_rounded;
+        break;
+      case AttendanceStatus.businessTrip:
+        bg = const Color(0xFF78716C).withValues(alpha: 0.12);
+        fg = const Color(0xFF78716C);
+        label = 'Công tác';
+        icon = Icons.flight_takeoff_rounded;
+        break;
+      case AttendanceStatus.workFromHome:
+        bg = const Color(0xFF10B981).withValues(alpha: 0.12);
+        fg = const Color(0xFF10B981);
+        label = 'WFH';
+        icon = Icons.home_work_rounded;
+        break;
+      case AttendanceStatus.holiday:
+        bg = const Color(0xFFF43F5E).withValues(alpha: 0.12);
+        fg = const Color(0xFFF43F5E);
+        label = 'Nghỉ lễ';
+        icon = Icons.celebration_rounded;
+        break;
+      case AttendanceStatus.overtime:
+        bg = const Color(0xFF7C3AED).withValues(alpha: 0.12);
+        fg = const Color(0xFF7C3AED);
+        label = 'Tăng ca';
+        icon = Icons.more_time_rounded;
+        break;
+      case AttendanceStatus.forgotPunch:
+        bg = const Color(0xFF6B7280).withValues(alpha: 0.12);
+        fg = const Color(0xFF6B7280);
+        label = 'Quên CC';
+        icon = Icons.help_outline_rounded;
         break;
     }
 
     return Container(
-      margin: const EdgeInsets.only(right: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(8),
@@ -497,14 +673,15 @@ class _StatusBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: fg),
-          const SizedBox(width: 4),
+          Icon(icon, size: 14, color: fg),
+          const SizedBox(width: 5),
           Text(
             label,
             style: AppTextStyles.labelSmall.copyWith(
               color: fg,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               letterSpacing: 0.1,
+              fontSize: 13,
             ),
           ),
         ],

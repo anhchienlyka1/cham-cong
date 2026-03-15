@@ -27,3 +27,13 @@ class AuthLogoutRequested extends AuthEvent {
 class AuthCheckStatusRequested extends AuthEvent {
   const AuthCheckStatusRequested();
 }
+
+/// Event cập nhật ca làm việc cho user trong state
+class AuthShiftUpdated extends AuthEvent {
+  final String shift;
+
+  const AuthShiftUpdated({required this.shift});
+
+  @override
+  List<Object?> get props => [shift];
+}

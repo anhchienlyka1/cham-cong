@@ -8,6 +8,11 @@ class UserModel extends UserEntity {
     required super.fullName,
     super.avatarUrl,
     super.phoneNumber,
+    super.employeeId,
+    super.department,
+    super.position,
+    super.workLocation,
+    super.shift,
     super.createdAt,
   });
 
@@ -18,6 +23,11 @@ class UserModel extends UserEntity {
       fullName: json['full_name'] as String,
       avatarUrl: json['avatar_url'] as String?,
       phoneNumber: json['phone_number'] as String?,
+      employeeId: json['employee_id'] as String?,
+      department: json['department'] as String?,
+      position: json['position'] as String?,
+      workLocation: json['work_location'] as String?,
+      shift: json['shift'] as String?,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : null,
@@ -31,6 +41,11 @@ class UserModel extends UserEntity {
       'full_name': fullName,
       'avatar_url': avatarUrl,
       'phone_number': phoneNumber,
+      'employee_id': employeeId,
+      'department': department,
+      'position': position,
+      'work_location': workLocation,
+      'shift': shift,
       'created_at': createdAt?.toIso8601String(),
     };
   }

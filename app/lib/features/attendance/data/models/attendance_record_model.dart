@@ -14,6 +14,11 @@ class AttendanceRecordModel extends AttendanceRecord {
     super.status,
     super.lateReason,
     super.earlyLeaveReason,
+    super.isLateFlag,
+    super.isEarlyLeaveFlag,
+    super.leaveType,
+    super.note,
+    super.overtimeHours,
   });
 
   /// Chuyển Firestore document → model
@@ -29,6 +34,11 @@ class AttendanceRecordModel extends AttendanceRecord {
       status: _statusFromString(data['status'] as String? ?? 'absent'),
       lateReason: data['lateReason'] as String?,
       earlyLeaveReason: data['earlyLeaveReason'] as String?,
+      isLateFlag: data['isLateFlag'] as bool? ?? false,
+      isEarlyLeaveFlag: data['isEarlyLeaveFlag'] as bool? ?? false,
+      leaveType: data['leaveType'] as String?,
+      note: data['note'] as String?,
+      overtimeHours: (data['overtimeHours'] as num?)?.toDouble(),
     );
   }
 
@@ -43,6 +53,11 @@ class AttendanceRecordModel extends AttendanceRecord {
       'status': _statusToString(status),
       if (lateReason != null) 'lateReason': lateReason,
       if (earlyLeaveReason != null) 'earlyLeaveReason': earlyLeaveReason,
+      'isLateFlag': isLateFlag,
+      'isEarlyLeaveFlag': isEarlyLeaveFlag,
+      if (leaveType != null) 'leaveType': leaveType,
+      if (note != null) 'note': note,
+      if (overtimeHours != null) 'overtimeHours': overtimeHours,
     };
   }
 
@@ -55,3 +70,5 @@ class AttendanceRecordModel extends AttendanceRecord {
 
   static String _statusToString(AttendanceStatus status) => status.name;
 }
+
+
