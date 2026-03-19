@@ -149,6 +149,7 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
     DateTime? checkOut,
     String? lateReason,
     String? earlyLeaveReason,
+    String? note,
     TimeOfDay shiftStart = const TimeOfDay(hour: 8, minute: 30),
     TimeOfDay shiftEnd = const TimeOfDay(hour: 17, minute: 30),
   }) async {
@@ -195,6 +196,11 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
       updates['earlyLeaveReason'] = earlyLeaveReason;
     } else if (!isEarly) {
       updates['earlyLeaveReason'] = FieldValue.delete();
+    }
+
+    // Ghi chú chung — chỉ cập nhật nếu được truyền vào
+    if (note != null) {
+      updates['note'] = note.isEmpty ? FieldValue.delete() : note;
     }
 
     await ref.update(updates);

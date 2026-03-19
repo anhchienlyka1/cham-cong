@@ -31,6 +31,17 @@ class ShiftParser {
     return TimeOfDay(hour: h, minute: m);
   }
 
+  /// Trả về giờ kết thúc ca ("H:mm") dựa trên giờ bắt đầu.
+  /// Mặc định 8h làm + 1.5h nghỉ trưa = 9.5h tổng.
+  static String endTime(String shiftStart) {
+    switch (shiftStart) {
+      case '8:00': return '17:30';
+      case '8:30': return '18:00';
+      case '9:00': return '18:30';
+      default:     return '17:30';
+    }
+  }
+
   /// Check if [checkIn] is after [shiftStart] (= late).
   static bool isLate(DateTime? checkIn, TimeOfDay shiftStart) {
     if (checkIn == null) return false;

@@ -6,6 +6,7 @@ import '../../../../config/themes/app_colors.dart';
 import '../../domain/entities/attendance_record.dart';
 import '../bloc/attendance_bloc.dart';
 import '../bloc/attendance_state.dart';
+import '../widgets/edit_time_sheet.dart';
 
 class AttendanceStatsPage extends StatefulWidget {
   const AttendanceStatsPage({super.key});
@@ -471,7 +472,10 @@ class _DayList extends StatelessWidget {
                 endIndent: 16,
                 color: Color(0xFFF3F4F6),
               ),
-              itemBuilder: (_, i) => _DayTile(record: records[i]),
+              itemBuilder: (ctx, i) => _DayTile(
+                record: records[i],
+                onTap: () => _openEditSheet(ctx, records[i]),
+              ),
             ),
             const SizedBox(height: 8),
           ],
@@ -481,15 +485,29 @@ class _DayList extends StatelessWidget {
   }
 }
 
+void _openEditSheet(BuildContext context, AttendanceRecord record) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => BlocProvider.value(
+      value: context.read<AttendanceBloc>(),
+      child: EditTimeSheet(record: record),
+    ),
+  );
+}
+
 class _DayTile extends StatelessWidget {
   final AttendanceRecord record;
-  const _DayTile({required this.record});
+  final VoidCallback? onTap;
+
+  const _DayTile({required this.record, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final (accentColor, _, __) = _statusInfo(record.status);
 
-    // Format hours like "8h 30m"
+    // Format hours
     String hoursLabel = '0h';
     if (record.hoursWorked != null && record.hoursWorked! > 0) {
       final h = record.hoursWorked!.floor();
@@ -497,7 +515,7 @@ class _DayTile extends StatelessWidget {
       hoursLabel = m > 0 ? '${h}h ${m}m' : '${h}h';
     }
 
-    // Build list of badge widgets (supports dual badges)
+    // Status badges
     final badges = <Widget>[];
     if (record.isLateFlag) {
       badges.add(_buildBadge('Muộn', const Color(0xFFF59E0B)));
@@ -506,108 +524,112 @@ class _DayTile extends StatelessWidget {
       badges.add(_buildBadge('Về sớm', const Color(0xFF3B82F6)));
     }
     if (badges.isEmpty) {
-      // Fallback to primary status badge
       final (_, badgeLabel, badgeColor) = _statusInfo(record.status);
       badges.add(_buildBadge(badgeLabel, badgeColor));
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Left accent bar
-            Container(
-              width: 4,
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: accentColor,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(width: 10),
-            // Content
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
-                  children: [
-                    // Date
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          record.dayOfWeek,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1A1A2E),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${record.date.day}/${record.date.month}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF6B7280),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    // Check-in / check-out
-                    Row(
-                      children: [
-                        _TimeChip(
-                          icon: Icons.login_rounded,
-                          time: record.formattedCheckIn,
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 4),
-                          child: Icon(
-                            Icons.arrow_forward_rounded,
-                            size: 12,
-                            color: Color(0xFFD1D5DB),
-                          ),
-                        ),
-                        _TimeChip(
-                          icon: Icons.logout_rounded,
-                          time: record.formattedCheckOut,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 8),
-                    // Hours + status badges
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          hoursLabel,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1A1A2E),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        // Dual badges row
-                        Wrap(
-                          spacing: 4,
-                          runSpacing: 2,
-                          alignment: WrapAlignment.end,
-                          children: badges,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 12),
-                  ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      splashColor: accentColor.withValues(alpha: 0.08),
+      highlightColor: accentColor.withValues(alpha: 0.04),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 4,
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            record.dayOfWeek,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1A1A2E),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${record.date.day}/${record.date.month}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          _TimeChip(
+                            icon: Icons.login_rounded,
+                            time: record.formattedCheckIn,
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4),
+                            child: Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 12,
+                              color: Color(0xFFD1D5DB),
+                            ),
+                          ),
+                          _TimeChip(
+                            icon: Icons.logout_rounded,
+                            time: record.formattedCheckOut,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            hoursLabel,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1A1A2E),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 4,
+                            runSpacing: 2,
+                            alignment: WrapAlignment.end,
+                            children: badges,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 16,
+                        color: Color(0xFFD1D5DB),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

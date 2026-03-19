@@ -23,8 +23,14 @@ class _EditTimeSheetState extends State<EditTimeSheet>
   late TimeOfDay _checkInTime;
   late TimeOfDay _checkOutTime;
   bool _isEditing = false;
+  bool _isEditingNotes = false;
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
+
+  // Note controllers
+  late TextEditingController _lateNoteCtrl;
+  late TextEditingController _earlyNoteCtrl;
+  late TextEditingController _noteCtrl;
 
   @override
   void initState() {
@@ -35,6 +41,12 @@ class _EditTimeSheetState extends State<EditTimeSheet>
     _checkOutTime = widget.record.checkOut != null
         ? TimeOfDay.fromDateTime(widget.record.checkOut!)
         : const TimeOfDay(hour: 17, minute: 0);
+
+    _lateNoteCtrl =
+        TextEditingController(text: widget.record.lateReason ?? '');
+    _earlyNoteCtrl =
+        TextEditingController(text: widget.record.earlyLeaveReason ?? '');
+    _noteCtrl = TextEditingController(text: widget.record.note ?? '');
 
     _animController = AnimationController(
       vsync: this,
@@ -50,6 +62,9 @@ class _EditTimeSheetState extends State<EditTimeSheet>
   @override
   void dispose() {
     _animController.dispose();
+    _lateNoteCtrl.dispose();
+    _earlyNoteCtrl.dispose();
+    _noteCtrl.dispose();
     super.dispose();
   }
 
@@ -101,7 +116,7 @@ class _EditTimeSheetState extends State<EditTimeSheet>
     String? lateReason;
     String? earlyLeaveReason;
 
-    // Hỏi lý do đi muộn
+    // Hỏi lý do đi muộn — pre-fill từ controller
     if (isLate) {
       lateReason = await _showReasonDialog(
         title: 'Đi muộn',
@@ -109,11 +124,12 @@ class _EditTimeSheetState extends State<EditTimeSheet>
             'Giờ vào ${_formatTime(_checkInTime)} sau giờ quy định ${_formatTime(shiftStart)}.\nVui lòng nhập lý do:',
         icon: Icons.schedule_rounded,
         color: AppColors.warning,
+        initialText: _lateNoteCtrl.text,
       );
-      if (lateReason == null) return; // User cancelled
+      if (lateReason == null) return;
     }
 
-    // Hỏi lý do về sớm
+    // Hỏi lý do về sớm — pre-fill từ controller
     if (isEarly) {
       earlyLeaveReason = await _showReasonDialog(
         title: 'Về sớm',
@@ -121,11 +137,17 @@ class _EditTimeSheetState extends State<EditTimeSheet>
             'Giờ ra ${_formatTime(_checkOutTime)} trước giờ quy định ${_formatTime(shiftEnd)}.\nVui lòng nhập lý do:',
         icon: Icons.directions_run_rounded,
         color: const Color(0xFF3B82F6),
+        initialText: _earlyNoteCtrl.text,
       );
-      if (earlyLeaveReason == null) return; // User cancelled
+      if (earlyLeaveReason == null) return;
     }
 
     if (!mounted) return;
+
+    // Cập nhật controller để phản ánh giá trị mới
+    if (isLate && lateReason != null) _lateNoteCtrl.text = lateReason;
+    if (isEarly && earlyLeaveReason != null)
+      _earlyNoteCtrl.text = earlyLeaveReason;
 
     context.read<AttendanceBloc>().add(
           AttendanceUpdateTime(
@@ -134,11 +156,38 @@ class _EditTimeSheetState extends State<EditTimeSheet>
             newCheckOut: newCheckOut,
             lateReason: lateReason,
             earlyLeaveReason: earlyLeaveReason,
+            note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
           ),
         );
 
-    // Show success snackbar then close
     Navigator.of(context).pop();
+    _showSuccessSnackbar('Đã lưu thay đổi thời gian');
+  }
+
+  /// Lưu chỉ phần ghi chú, không thay đổi giờ.
+  void _onSaveNotes() {
+    if (!mounted) return;
+    context.read<AttendanceBloc>().add(
+          AttendanceUpdateTime(
+            recordId: widget.record.id,
+            newCheckIn: widget.record.checkIn,
+            newCheckOut: widget.record.checkOut,
+            lateReason: _lateNoteCtrl.text.trim().isEmpty
+                ? null
+                : _lateNoteCtrl.text.trim(),
+            earlyLeaveReason: _earlyNoteCtrl.text.trim().isEmpty
+                ? null
+                : _earlyNoteCtrl.text.trim(),
+            note: _noteCtrl.text.trim().isEmpty
+                ? null
+                : _noteCtrl.text.trim(),
+          ),
+        );
+    setState(() => _isEditingNotes = false);
+    _showSuccessSnackbar('Đã lưu ghi chú');
+  }
+
+  void _showSuccessSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -147,7 +196,7 @@ class _EditTimeSheetState extends State<EditTimeSheet>
                 color: Colors.white, size: 18),
             const SizedBox(width: 8),
             Text(
-              'Đã lưu thay đổi',
+              message,
               style: AppTextStyles.labelMedium
                   .copyWith(color: Colors.white, fontSize: 14),
             ),
@@ -155,7 +204,8 @@ class _EditTimeSheetState extends State<EditTimeSheet>
         ),
         backgroundColor: AppColors.success,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 2),
       ),
@@ -169,8 +219,9 @@ class _EditTimeSheetState extends State<EditTimeSheet>
     required String message,
     required IconData icon,
     required Color color,
+    String initialText = '',
   }) async {
-    final controller = TextEditingController();
+    final controller = TextEditingController(text: initialText);
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -321,10 +372,8 @@ class _EditTimeSheetState extends State<EditTimeSheet>
 
                       const SizedBox(height: 14),
 
-                      // Notes section (if reason exists)
-                      if (widget.record.lateReason != null ||
-                          widget.record.earlyLeaveReason != null)
-                        _buildNotesCard(),
+                      // Notes — always visible
+                      _buildNotesCard(),
 
                       const SizedBox(height: 20),
                     ],
@@ -773,7 +822,20 @@ class _EditTimeSheetState extends State<EditTimeSheet>
 
   // ── Notes card ───────────────────────────────────────────────────
   Widget _buildNotesCard() {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      child: _isEditingNotes ? _buildNotesEditMode() : _buildNotesViewMode(),
+    );
+  }
+
+  Widget _buildNotesViewMode() {
+    final hasLate = _lateNoteCtrl.text.isNotEmpty;
+    final hasEarly = _earlyNoteCtrl.text.isNotEmpty;
+    final hasNote = _noteCtrl.text.isNotEmpty;
+    final hasAny = hasLate || hasEarly || hasNote;
+
     return Container(
+      key: const ValueKey('notes-view'),
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -790,6 +852,7 @@ class _EditTimeSheetState extends State<EditTimeSheet>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header row
           Row(
             children: [
               const Icon(Icons.notes_rounded,
@@ -799,30 +862,228 @@ class _EditTimeSheetState extends State<EditTimeSheet>
                 'Ghi chú',
                 style: AppTextStyles.labelMedium.copyWith(
                   color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => setState(() => _isEditingNotes = true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySurface,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.edit_rounded,
+                          size: 12, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Sửa ghi chú',
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          if (widget.record.lateReason != null)
-            _NoteItem(
-              label: 'Lý do đi muộn',
-              value: widget.record.lateReason!,
-              color: AppColors.warning,
-              icon: Icons.schedule_rounded,
+          if (hasAny) ...[
+            const SizedBox(height: 10),
+            if (hasLate)
+              _NoteItem(
+                label: 'Lý do đi muộn',
+                value: _lateNoteCtrl.text,
+                color: AppColors.warning,
+                icon: Icons.schedule_rounded,
+              ),
+            if (hasLate && (hasEarly || hasNote))
+              const SizedBox(height: 8),
+            if (hasEarly)
+              _NoteItem(
+                label: 'Lý do về sớm',
+                value: _earlyNoteCtrl.text,
+                color: const Color(0xFF3B82F6),
+                icon: Icons.directions_run_rounded,
+              ),
+            if (hasEarly && hasNote) const SizedBox(height: 8),
+            if (hasNote)
+              _NoteItem(
+                label: 'Ghi chú chung',
+                value: _noteCtrl.text,
+                color: AppColors.textSecondary,
+                icon: Icons.sticky_note_2_rounded,
+              ),
+          ] else ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.add_comment_rounded,
+                    size: 14, color: AppColors.textHint),
+                const SizedBox(width: 6),
+                Text(
+                  'Chưa có ghi chú',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.textHint,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
             ),
-          if (widget.record.lateReason != null &&
-              widget.record.earlyLeaveReason != null)
-            const SizedBox(height: 8),
-          if (widget.record.earlyLeaveReason != null)
-            _NoteItem(
-              label: 'Lý do về sớm',
-              value: widget.record.earlyLeaveReason!,
-              color: AppColors.info,
-              icon: Icons.directions_run_rounded,
-            ),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildNotesEditMode() {
+    return Container(
+      key: const ValueKey('notes-edit'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.25),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.07),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySurface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.edit_note_rounded,
+                    size: 15, color: AppColors.primary),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Chỉnh sửa ghi chú',
+                style: AppTextStyles.labelMedium.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  // Reset controllers về giá trị hiện tại của record
+                  _lateNoteCtrl.text = widget.record.lateReason ?? '';
+                  _earlyNoteCtrl.text = widget.record.earlyLeaveReason ?? '';
+                  _noteCtrl.text = widget.record.note ?? '';
+                  setState(() => _isEditingNotes = false);
+                },
+                child: const Icon(Icons.close_rounded,
+                    size: 20, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Lý do đi muộn
+          _buildNoteField(
+            controller: _lateNoteCtrl,
+            label: 'Lý do đi muộn',
+            hint: 'Nhập lý do đi muộn...',
+            icon: Icons.schedule_rounded,
+            color: AppColors.warning,
+          ),
+          const SizedBox(height: 10),
+
+          // Lý do về sớm
+          _buildNoteField(
+            controller: _earlyNoteCtrl,
+            label: 'Lý do về sớm',
+            hint: 'Nhập lý do về sớm...',
+            icon: Icons.directions_run_rounded,
+            color: const Color(0xFF3B82F6),
+          ),
+          const SizedBox(height: 10),
+
+          // Ghi chú chung
+          _buildNoteField(
+            controller: _noteCtrl,
+            label: 'Ghi chú chung',
+            hint: 'Thêm ghi chú...',
+            icon: Icons.sticky_note_2_rounded,
+            color: AppColors.textSecondary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoteField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: AppTextStyles.labelSmall.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        TextField(
+          controller: controller,
+          maxLines: 2,
+          style: AppTextStyles.bodySmall
+              .copyWith(color: AppColors.textPrimary),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textHint,
+            ),
+            filled: true,
+            fillColor: color.withValues(alpha: 0.05),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: color, width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.all(12),
+          ),
+        ),
+      ],
     );
   }
 
@@ -836,85 +1097,156 @@ class _EditTimeSheetState extends State<EditTimeSheet>
           top: BorderSide(color: AppColors.divider, width: 1),
         ),
       ),
-      child: _isEditing
-          ? Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => setState(() {
-                      _isEditing = false;
-                      _checkInTime = widget.record.checkIn != null
-                          ? TimeOfDay.fromDateTime(widget.record.checkIn!)
-                          : const TimeOfDay(hour: 8, minute: 0);
-                      _checkOutTime = widget.record.checkOut != null
-                          ? TimeOfDay.fromDateTime(widget.record.checkOut!)
-                          : const TimeOfDay(hour: 17, minute: 0);
-                    }),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: const BorderSide(color: AppColors.divider),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: Text(
-                      'Hủy',
-                      style: AppTextStyles.button.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: _onSave,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.save_rounded,
-                            size: 18, color: Colors.white),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Lưu thay đổi',
-                          style: AppTextStyles.button.copyWith(
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            )
-          : SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: const BorderSide(color: AppColors.divider),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: Text(
-                  'Đóng',
-                  style: AppTextStyles.button.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: _isEditing
+            ? _buildTimeEditActions()
+            : _isEditingNotes
+                ? _buildNoteEditActions()
+                : _buildCloseAction(),
+      ),
+    );
+  }
+
+  Widget _buildTimeEditActions() {
+    return Row(
+      key: const ValueKey('time-actions'),
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => setState(() {
+              _isEditing = false;
+              _checkInTime = widget.record.checkIn != null
+                  ? TimeOfDay.fromDateTime(widget.record.checkIn!)
+                  : const TimeOfDay(hour: 8, minute: 0);
+              _checkOutTime = widget.record.checkOut != null
+                  ? TimeOfDay.fromDateTime(widget.record.checkOut!)
+                  : const TimeOfDay(hour: 17, minute: 0);
+            }),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              side: const BorderSide(color: AppColors.divider),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
+            child: Text(
+              'Hủy',
+              style: AppTextStyles.button.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 2,
+          child: ElevatedButton(
+            onPressed: _onSave,
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 0,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.save_rounded,
+                    size: 18, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  'Lưu thời gian',
+                  style: AppTextStyles.button.copyWith(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNoteEditActions() {
+    return Row(
+      key: const ValueKey('note-actions'),
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () {
+              _lateNoteCtrl.text = widget.record.lateReason ?? '';
+              _earlyNoteCtrl.text = widget.record.earlyLeaveReason ?? '';
+              _noteCtrl.text = widget.record.note ?? '';
+              setState(() => _isEditingNotes = false);
+            },
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              side: const BorderSide(color: AppColors.divider),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: Text(
+              'Hủy',
+              style: AppTextStyles.button.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 2,
+          child: ElevatedButton(
+            onPressed: _onSaveNotes,
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 0,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.note_alt_rounded,
+                    size: 18, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  'Lưu ghi chú',
+                  style: AppTextStyles.button.copyWith(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCloseAction() {
+    return SizedBox(
+      key: const ValueKey('close-action'),
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: () => Navigator.of(context).pop(),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          side: const BorderSide(color: AppColors.divider),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: Text(
+          'Đóng',
+          style: AppTextStyles.button.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ),
     );
   }
 

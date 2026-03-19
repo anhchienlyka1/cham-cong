@@ -4,15 +4,16 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-
-
 import '../../../../config/themes/app_colors.dart';
 import '../../../../config/themes/app_text_styles.dart';
+import '../../../../core/services/notification_service.dart';
+import '../../../attendance/domain/utils/shift_parser.dart';
 import '../../../attendance/presentation/bloc/attendance_bloc.dart';
 import '../../../attendance/presentation/bloc/attendance_state.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../widgets/user_avatar_widget.dart';
+import 'attendance_status_settings_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -50,13 +51,27 @@ class _ProfilePageState extends State<ProfilePage> {
       backgroundColor: Colors.transparent,
       builder: (_) => _ShiftPickerSheet(
         selected: _selectedShift,
-        onPick: (v) {
+        onPick: (v) async {
           setState(() => _selectedShift = v);
           _saveShiftToFirestore(v);
           // Cập nhật user state trong AuthBloc
-          context.read<AuthBloc>().add(AuthShiftUpdated(shift: v));
-          Navigator.pop(context);
+          if (mounted) context.read<AuthBloc>().add(AuthShiftUpdated(shift: v));
+          // Đặt lại thông báo theo ca mới (nhắc trước 5 phút đầu/cuối ca)
+          await NotificationService.rescheduleForShift(
+            shiftStart: v,
+            shiftEnd: ShiftParser.endTime(v),
+          );
+          if (mounted) Navigator.pop(context);
         },
+      ),
+    );
+  }
+
+  void _openStatusSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AttendanceStatusSettingsPage(),
       ),
     );
   }
@@ -93,6 +108,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     user: authState.user,
                     selectedShift: _selectedShift,
                     onPickShift: _pickShift,
+                    onOpenStatusSettings: _openStatusSettings,
                   );
                 },
               );
@@ -110,12 +126,14 @@ class _ProfileBody extends StatelessWidget {
   final UserEntity? user;
   final String selectedShift;
   final VoidCallback onPickShift;
+  final VoidCallback onOpenStatusSettings;
 
   const _ProfileBody({
     required this.state,
     required this.user,
     required this.selectedShift,
     required this.onPickShift,
+    required this.onOpenStatusSettings,
   });
 
   @override
@@ -183,6 +201,15 @@ class _ProfileBody extends StatelessWidget {
                     _ShiftTile(
                       selected: selectedShift,
                       onTap: onPickShift,
+                    ),
+                    // Quản lý trạng thái chấm công
+                    _SettingsTile(
+                      icon: Icons.assignment_turned_in_rounded,
+                      iconColor: const Color(0xFF6366F1),
+                      label: 'Quản lý trạng thái',
+                      subtitle: 'Đúng giờ, đi muộn, về sớm...',
+                      onTap: onOpenStatusSettings,
+                      isLast: true,
                     ),
                   ],
                 ),
@@ -681,6 +708,84 @@ class _ShiftTile extends StatelessWidget {
   }
 }
 
+// ── Generic settings tile ───────────────────────────────────────────────────
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool isLast;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+    this.isLast = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 12, 6),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 20),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: AppColors.textHint,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textHint,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (!isLast)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Divider(height: 1, color: AppColors.divider),
+          ),
+      ],
+    );
+  }
+}
+
 // ── Shift picker bottom sheet ────────────────────────────────────────────────
 class _ShiftPickerSheet extends StatelessWidget {
   final String selected;
@@ -792,7 +897,7 @@ class _ShiftPickerSheet extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Bắt đầu lúc $shift – kết thúc lúc ${_endTime(shift)}',
+                            'Bắt đầu lúc $shift – kết thúc lúc ${ShiftParser.endTime(shift)}',
                             style: TextStyle(
                               fontSize: 12,
                               color: isSelected
@@ -818,18 +923,5 @@ class _ShiftPickerSheet extends StatelessWidget {
       ),
     );
   }
-
-  String _endTime(String start) {
-    // 8h làm việc + 1.5h nghỉ trưa = 9.5h tổng
-    switch (start) {
-      case '8:00':
-        return '17:30';
-      case '8:30':
-        return '18:00';
-      case '9:00':
-        return '18:30';
-      default:
-        return '17:30';
-    }
-  }
 }
+

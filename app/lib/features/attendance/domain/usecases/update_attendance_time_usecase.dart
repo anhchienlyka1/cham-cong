@@ -14,6 +14,7 @@ class UpdateAttendanceTimeUseCase {
     DateTime? checkOut,
     String? lateReason,
     String? earlyLeaveReason,
+    String? note,
     TimeOfDay shiftStart = const TimeOfDay(hour: 8, minute: 30),
     TimeOfDay shiftEnd = const TimeOfDay(hour: 17, minute: 30),
   }) =>
@@ -24,6 +25,7 @@ class UpdateAttendanceTimeUseCase {
         checkOut: checkOut,
         lateReason: lateReason,
         earlyLeaveReason: earlyLeaveReason,
+        note: note,
         shiftStart: shiftStart,
         shiftEnd: shiftEnd,
       );

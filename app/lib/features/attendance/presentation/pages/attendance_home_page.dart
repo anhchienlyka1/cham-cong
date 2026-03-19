@@ -1349,17 +1349,21 @@ class _ReasonDialogState extends State<_ReasonDialog> {
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
-              child: TextButton(
+              child: OutlinedButton(
                 onPressed: () => Navigator.pop(context),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.grey[500],
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFE8601C),
+                  side: const BorderSide(color: Color(0xFFE8601C), width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
                 child: const Text(
                   'Hủy',
                   style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
                   ),
                 ),
               ),

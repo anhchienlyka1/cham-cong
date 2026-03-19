@@ -193,6 +193,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         checkOut: event.newCheckOut,
         lateReason: event.lateReason,
         earlyLeaveReason: event.earlyLeaveReason,
+        note: event.note,
         shiftStart: shiftStart,
         shiftEnd: shiftEnd,
       );

@@ -29,6 +29,7 @@ class AttendanceUpdateTime extends AttendanceEvent {
   final DateTime? newCheckOut;
   final String? lateReason;
   final String? earlyLeaveReason;
+  final String? note;
 
   const AttendanceUpdateTime({
     required this.recordId,
@@ -36,6 +37,7 @@ class AttendanceUpdateTime extends AttendanceEvent {
     this.newCheckOut,
     this.lateReason,
     this.earlyLeaveReason,
+    this.note,
   });
 }
 

@@ -1,7 +1,9 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/services/notification_service.dart';
 import '../../../../core/usecase/usecase.dart';
+import '../../../attendance/domain/utils/shift_parser.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/usecases/get_current_user_usecase.dart';
 import '../../domain/usecases/login_usecase.dart';
@@ -80,10 +82,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         status: AuthStatus.unauthenticated,
         errorMessage: failure.message,
       )),
-      (user) => emit(state.copyWith(
-        status: AuthStatus.authenticated,
-        user: user,
-      )),
+      (user) {
+        emit(state.copyWith(
+          status: AuthStatus.authenticated,
+          user: user,
+        ));
+        // Reschedule alarm theo ca đã lưu (sau reboot hoặc cài lại app)
+        final shift = user.shift;
+        if (shift != null && shift.isNotEmpty) {
+          NotificationService.rescheduleForShift(
+            shiftStart: shift,
+            shiftEnd: ShiftParser.endTime(shift),
+          );
+        }
+      },
     );
   }
 

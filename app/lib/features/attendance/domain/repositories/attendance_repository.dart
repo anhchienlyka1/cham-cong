@@ -38,6 +38,7 @@ abstract class AttendanceRepository {
     DateTime? checkOut,
     String? lateReason,
     String? earlyLeaveReason,
+    String? note,
     TimeOfDay shiftStart = const TimeOfDay(hour: 8, minute: 30),
     TimeOfDay shiftEnd = const TimeOfDay(hour: 17, minute: 30),
   });

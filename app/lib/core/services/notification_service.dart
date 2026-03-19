@@ -65,17 +65,21 @@ class NotificationService {
     await _plugin.show(id, title, body, _notifDetails);
   }
 
-  /// Lên lịch check-in lúc 8:25 sáng hằng ngày (chỉ cần gọi một lần).
-  static Future<void> scheduleCheckInReminder() async {
+  /// Lên lịch check-in hằng ngày.
+  ///
+  /// [hour] và [minute] là giờ nhắc (mặc định lấy từ AppConstants nếu không truyền).
+  static Future<void> scheduleCheckInReminder({
+    int? hour,
+    int? minute,
+  }) async {
+    final h = hour ?? AppConstants.checkInNotifHour;
+    final m = minute ?? AppConstants.checkInNotifMinute;
     try {
       await _plugin.zonedSchedule(
         AppConstants.notifIdCheckIn,
         '⏰ Nhắc chấm công vào',
         'Đừng quên chấm công vào hôm nay!',
-        _nextInstanceOfTime(
-          AppConstants.checkInNotifHour,
-          AppConstants.checkInNotifMinute,
-        ),
+        _nextInstanceOfTime(h, m),
         _notifDetails,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
@@ -88,10 +92,7 @@ class NotificationService {
         AppConstants.notifIdCheckIn,
         '⏰ Nhắc chấm công vào',
         'Đừng quên chấm công vào hôm nay!',
-        _nextInstanceOfTime(
-          AppConstants.checkInNotifHour,
-          AppConstants.checkInNotifMinute,
-        ),
+        _nextInstanceOfTime(h, m),
         _notifDetails,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
@@ -101,17 +102,21 @@ class NotificationService {
     }
   }
 
-  /// Lên lịch check-out lúc 17:25 hằng ngày.
-  static Future<void> scheduleCheckOutReminder() async {
+  /// Lên lịch check-out hằng ngày.
+  ///
+  /// [hour] và [minute] là giờ nhắc (mặc định lấy từ AppConstants nếu không truyền).
+  static Future<void> scheduleCheckOutReminder({
+    int? hour,
+    int? minute,
+  }) async {
+    final h = hour ?? AppConstants.checkOutNotifHour;
+    final m = minute ?? AppConstants.checkOutNotifMinute;
     try {
       await _plugin.zonedSchedule(
         AppConstants.notifIdCheckOut,
         '🏁 Nhắc chấm công ra',
         'Đừng quên chấm công ra trước khi về!',
-        _nextInstanceOfTime(
-          AppConstants.checkOutNotifHour,
-          AppConstants.checkOutNotifMinute,
-        ),
+        _nextInstanceOfTime(h, m),
         _notifDetails,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
@@ -123,10 +128,7 @@ class NotificationService {
         AppConstants.notifIdCheckOut,
         '🏁 Nhắc chấm công ra',
         'Đừng quên chấm công ra trước khi về!',
-        _nextInstanceOfTime(
-          AppConstants.checkOutNotifHour,
-          AppConstants.checkOutNotifMinute,
-        ),
+        _nextInstanceOfTime(h, m),
         _notifDetails,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
@@ -134,6 +136,46 @@ class NotificationService {
         matchDateTimeComponents: DateTimeComponents.time,
       );
     }
+  }
+
+  /// Tính lại và đăng ký lại cả 2 alarm dựa trên ca chọn.
+  ///
+  /// [shiftStart] — giờ bắt đầu ca (e.g. "8:30").
+  /// [shiftEnd]   — giờ kết thúc ca (e.g. "17:30").
+  /// Nhắc trước 5 phút mỗi đầu/cuối ca.
+  static Future<void> rescheduleForShift({
+    required String shiftStart,
+    required String shiftEnd,
+  }) async {
+    final start = _parseShiftTime(shiftStart);
+    final end   = _parseShiftTime(shiftEnd);
+
+    // Huỷ alarm cũ
+    await _plugin.cancel(AppConstants.notifIdCheckIn);
+    await _plugin.cancel(AppConstants.notifIdCheckOut);
+
+    // Nhắc trước 5 phút
+    final (inH, inM) = _subtractMinutes(start.$1, start.$2, 5);
+    final (outH, outM) = _subtractMinutes(end.$1, end.$2, 5);
+
+    await scheduleCheckInReminder(hour: inH, minute: inM);
+    await scheduleCheckOutReminder(hour: outH, minute: outM);
+  }
+
+  /// Parse "H:mm" → (hour, minute). Trả về (0, 0) nếu lỗi.
+  static (int, int) _parseShiftTime(String time) {
+    final parts = time.split(':');
+    if (parts.length != 2) return (0, 0);
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+    return (h, m);
+  }
+
+  /// Trừ [minutes] phút khỏi (hour, minute), clamp về 0.
+  static (int, int) _subtractMinutes(int h, int m, int minutes) {
+    final total = h * 60 + m - minutes;
+    if (total < 0) return (0, 0);
+    return (total ~/ 60, total % 60);
   }
 
   static tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
