@@ -16,6 +16,8 @@ import '../features/attendance/domain/usecases/get_attendance_history_usecase.da
 import '../features/attendance/domain/usecases/get_today_record_usecase.dart';
 import '../features/attendance/domain/usecases/delete_attendance_usecase.dart';
 import '../features/attendance/domain/usecases/update_attendance_time_usecase.dart';
+import '../features/attendance/domain/usecases/submit_forgot_punch_usecase.dart';
+import '../features/attendance/domain/usecases/mark_day_type_usecase.dart';
 import '../features/attendance/presentation/bloc/attendance_bloc.dart';
 
 final sl = GetIt.instance;
@@ -58,6 +60,10 @@ Future<void> configureDependencies() async {
       () => UpdateAttendanceTimeUseCase(sl<AttendanceRepository>()));
   sl.registerLazySingleton(
       () => DeleteAttendanceUseCase(sl<AttendanceRepository>()));
+  sl.registerLazySingleton(
+      () => SubmitForgotPunchUseCase(sl<AttendanceRepository>()));
+  sl.registerLazySingleton(
+      () => MarkDayTypeUseCase(sl<AttendanceRepository>()));
 
   sl.registerFactory(
     () => AttendanceBloc(
@@ -67,6 +73,8 @@ Future<void> configureDependencies() async {
       getTodayRecordUseCase: sl<GetTodayRecordUseCase>(),
       updateTimeUseCase: sl<UpdateAttendanceTimeUseCase>(),
       deleteUseCase: sl<DeleteAttendanceUseCase>(),
+      forgotPunchUseCase: sl<SubmitForgotPunchUseCase>(),
+      markDayTypeUseCase: sl<MarkDayTypeUseCase>(),
       authBloc: sl<AuthBloc>(),
     ),
   );

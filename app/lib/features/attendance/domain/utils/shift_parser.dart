@@ -42,6 +42,12 @@ class ShiftParser {
     }
   }
 
+  /// Tính giờ tan ca thực tế (= shiftStart + 8h làm + 1.5h nghỉ trưa).
+  static TimeOfDay actualShiftEnd(TimeOfDay shiftStart) {
+    final totalMinutes = shiftStart.hour * 60 + shiftStart.minute + 8 * 60 + 90;
+    return TimeOfDay(hour: totalMinutes ~/ 60, minute: totalMinutes % 60);
+  }
+
   /// Check if [checkIn] is after [shiftStart] (= late).
   static bool isLate(DateTime? checkIn, TimeOfDay shiftStart) {
     if (checkIn == null) return false;

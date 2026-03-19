@@ -48,5 +48,21 @@ abstract class AttendanceRepository {
     required String userId,
     required String recordId,
   });
+
+  /// Tạo record mới với trạng thái "quên chấm công" (forgotPunch).
+  Future<AttendanceRecord> submitForgotPunch({
+    required String userId,
+    required DateTime date,
+    required DateTime checkIn,
+    required DateTime checkOut,
+    required String reason,
+  });
+
+  /// Đánh dấu nhanh loại ngày hôm nay (nghỉ phép / NKL / WFH).
+  /// Tạo record mới nếu chưa tồn tại, ngược lại cập nhật status.
+  Future<AttendanceRecord> markDayType({
+    required String userId,
+    required AttendanceStatus status,
+  });
 }
 

@@ -21,7 +21,7 @@ class EditTimeSheet extends StatefulWidget {
 class _EditTimeSheetState extends State<EditTimeSheet>
     with SingleTickerProviderStateMixin {
   late TimeOfDay _checkInTime;
-  late TimeOfDay _checkOutTime;
+  TimeOfDay? _checkOutTime; // nullable — chưa có khi chỉ check in
   bool _isEditing = false;
   bool _isEditingNotes = false;
   late AnimationController _animController;
@@ -38,9 +38,10 @@ class _EditTimeSheetState extends State<EditTimeSheet>
     _checkInTime = widget.record.checkIn != null
         ? TimeOfDay.fromDateTime(widget.record.checkIn!)
         : const TimeOfDay(hour: 8, minute: 0);
+    // Chỉ init checkout nếu record đã có
     _checkOutTime = widget.record.checkOut != null
         ? TimeOfDay.fromDateTime(widget.record.checkOut!)
-        : const TimeOfDay(hour: 17, minute: 0);
+        : null;
 
     _lateNoteCtrl =
         TextEditingController(text: widget.record.lateReason ?? '');
@@ -69,9 +70,12 @@ class _EditTimeSheetState extends State<EditTimeSheet>
   }
 
   Future<void> _selectTime(BuildContext context, bool isCheckIn) async {
+    final initial = isCheckIn
+        ? _checkInTime
+        : (_checkOutTime ?? const TimeOfDay(hour: 17, minute: 0));
     final picked = await showTimePicker(
       context: context,
-      initialTime: isCheckIn ? _checkInTime : _checkOutTime,
+      initialTime: initial,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -101,17 +105,22 @@ class _EditTimeSheetState extends State<EditTimeSheet>
       date.year, date.month, date.day,
       _checkInTime.hour, _checkInTime.minute,
     );
-    final newCheckOut = DateTime(
-      date.year, date.month, date.day,
-      _checkOutTime.hour, _checkOutTime.minute,
-    );
+    // Chỉ ghi checkout khi user đã set
+    final DateTime? newCheckOut = _checkOutTime != null
+        ? DateTime(
+            date.year, date.month, date.day,
+            _checkOutTime!.hour, _checkOutTime!.minute,
+          )
+        : null;
 
     // Lấy shift time từ AuthBloc
     final shift = context.read<AuthBloc>().state.user?.shift;
     final (shiftStart, shiftEnd) = ShiftParser.parse(shift);
 
     final isLate = ShiftParser.isLate(newCheckIn, shiftStart);
-    final isEarly = ShiftParser.isEarlyLeave(newCheckOut, shiftEnd);
+    final isEarly = newCheckOut != null
+        ? ShiftParser.isEarlyLeave(newCheckOut, shiftEnd)
+        : false;
 
     String? lateReason;
     String? earlyLeaveReason;
@@ -134,7 +143,7 @@ class _EditTimeSheetState extends State<EditTimeSheet>
       earlyLeaveReason = await _showReasonDialog(
         title: 'Về sớm',
         message:
-            'Giờ ra ${_formatTime(_checkOutTime)} trước giờ quy định ${_formatTime(shiftEnd)}.\nVui lòng nhập lý do:',
+            'Giờ ra ${_formatTime(_checkOutTime!)} trước giờ quy định ${_formatTime(shiftEnd)}.\nVui lòng nhập lý do:',
         icon: Icons.directions_run_rounded,
         color: const Color(0xFF3B82F6),
         initialText: _earlyNoteCtrl.text,
@@ -317,11 +326,18 @@ class _EditTimeSheetState extends State<EditTimeSheet>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   String _calculateHours() {
+    if (_checkOutTime == null) return '--';
     final start = _checkInTime.hour * 60 + _checkInTime.minute;
-    final end = _checkOutTime.hour * 60 + _checkOutTime.minute;
+    final end = _checkOutTime!.hour * 60 + _checkOutTime!.minute;
     final diff = end - start;
     if (diff <= 0) return '0 giờ';
-    final netMinutes = diff - 90; // trừ 1.5h nghỉ trưa
+    // Tính lunch overlap (12:00–13:30)
+    final lunchStart = 12 * 60;
+    final lunchEnd = 13 * 60 + 30;
+    final overlapStart = start > lunchStart ? start : lunchStart;
+    final overlapEnd = end < lunchEnd ? end : lunchEnd;
+    final lunchDeduction = overlapStart < overlapEnd ? overlapEnd - overlapStart : 0;
+    final netMinutes = diff - lunchDeduction;
     if (netMinutes <= 0) return '0 giờ';
     final h = netMinutes ~/ 60;
     final m = netMinutes % 60;
@@ -757,11 +773,12 @@ class _EditTimeSheetState extends State<EditTimeSheet>
 
   Widget _buildTimePickerCard({
     required String label,
-    required TimeOfDay time,
+    required TimeOfDay? time,
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
   }) {
+    final timeText = time != null ? _formatTime(time) : '--:--';
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -791,22 +808,21 @@ class _EditTimeSheetState extends State<EditTimeSheet>
             ),
             const SizedBox(height: 6),
             Text(
-              _formatTime(time),
+              timeText,
               style: AppTextStyles.h3.copyWith(
-                color: AppColors.textPrimary,
+                color: time != null ? AppColors.textPrimary : AppColors.textSecondary,
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 6),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                'Nhấn để sửa',
+                time != null ? 'Nhấn để sửa' : 'Nhấn để điền',
                 style: AppTextStyles.labelSmall.copyWith(
                   color: color,
                   fontWeight: FontWeight.w600,
@@ -1265,6 +1281,9 @@ class _EditTimeSheetState extends State<EditTimeSheet>
       case AttendanceStatus.onLeave:
         return _StatusInfo(
             const Color(0xFF06B6D4), Icons.beach_access_rounded, 'Nghỉ phép');
+      case AttendanceStatus.unpaidLeave:
+        return _StatusInfo(const Color(0xFF64748B),
+            Icons.money_off_rounded, 'NKL');
       case AttendanceStatus.earlyLeave:
         return _StatusInfo(const Color(0xFF3B82F6),
             Icons.directions_run_rounded, 'Về sớm');

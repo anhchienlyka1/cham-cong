@@ -2,14 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 
 import '../../../../config/themes/app_text_styles.dart';
+import '../../domain/entities/attendance_record.dart';
 import '../../domain/utils/work_hours_calculator.dart';
 import '../bloc/attendance_bloc.dart';
 import '../bloc/attendance_state.dart';
 import '../bloc/attendance_event.dart';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Page
@@ -672,11 +672,11 @@ class _ActionZoneState extends State<_ActionZone> {
     final state = widget.state;
     final isDone = state.isCheckedOut;
     final isWorking = state.isCheckedIn && !isDone;
+    final notStarted = !state.isCheckedIn;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final bottomItems = isDone ? 0.0 : 60.0;
-        final available = constraints.maxHeight - bottomItems;
+        final available = constraints.maxHeight - (notStarted ? 100.0 : 0.0);
         final btnSize = available.clamp(140.0, 200.0);
 
         return Column(
@@ -688,15 +688,15 @@ class _ActionZoneState extends State<_ActionZone> {
               isWorking: isWorking,
               onTap: () => _handleMainButton(context),
             ),
-            if (!isDone) const SizedBox(height: 12),
-            if (!isDone) const _LocationCard(),
+            // 3 card nhanh – hiện khi chưa check-in
+            if (notStarted) const SizedBox(height: 20),
+            if (notStarted) const _QuickDayTypeRow(),
           ],
         );
       },
     );
   }
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Check Button – khổng lồ, pulsing
@@ -865,201 +865,239 @@ class _MainCheckButtonState extends State<_MainCheckButton>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Location Card – hiển thị vị trí GPS hiện tại
+// Day Type Selector – 3 option trạng thái nghỉ: Nghỉ phép / Nghỉ KL / WFH
 // ─────────────────────────────────────────────────────────────────────────────
-class _LocationCard extends StatefulWidget {
-  const _LocationCard();
+class _DayTypeSelector extends StatefulWidget {
+  const _DayTypeSelector();
 
   @override
-  State<_LocationCard> createState() => _LocationCardState();
+  State<_DayTypeSelector> createState() => _DayTypeSelectorState();
 }
 
-class _LocationCardState extends State<_LocationCard> {
-  String _address = '';
-  String _coords = '';
-  bool _loading = true;
-  bool _error = false;
+class _DayTypeSelectorState extends State<_DayTypeSelector> {
+  int? _selected; // 0=Nghỉ phép, 1=Nghỉ KL, 2=WFH
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchLocation();
+  static const _options = [
+    _DayTypeOption(
+      label: 'Nghỉ phép',
+      icon: Icons.beach_access_rounded,
+      color: Color(0xFF06B6D4),
+      description: 'Ngày nghỉ có lương',
+    ),
+    _DayTypeOption(
+      label: 'Nghỉ không lương',
+      icon: Icons.money_off_rounded,
+      color: Color(0xFFF97316),
+      description: 'Ngày nghỉ không hưởng lương',
+    ),
+    _DayTypeOption(
+      label: 'WFH',
+      icon: Icons.home_work_rounded,
+      color: Color(0xFF10B981),
+      description: 'Làm việc tại nhà',
+    ),
+  ];
+
+  void _onTap(BuildContext context, int index) {
+    HapticFeedback.lightImpact();
+    setState(() => _selected = index);
+    _showConfirmDialog(context, index);
   }
 
-  Future<void> _fetchLocation() async {
-    if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _error = false;
-    });
-
-    try {
-      // Check permission
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        if (mounted) setState(() { _error = true; _loading = false; _address = 'GPS đang tắt'; });
-        return;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        if (mounted) setState(() { _error = true; _loading = false; _address = 'Chưa cấp quyền vị trí'; });
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
+  Future<void> _showConfirmDialog(BuildContext context, int index) async {
+    final opt = _options[index];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: opt.color.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(opt.icon, color: opt.color, size: 28),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Đăng ký ${opt.label}?',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1A1A1A),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                opt.description,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[600],
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        side: BorderSide(color: Colors.grey[300]!),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Hủy',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        backgroundColor: opt.color,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Xác nhận',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-      );
+      ),
+    );
 
-      final coordsText =
-          '${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
-
-      // Reverse geocoding to get address
-      String addressText = coordsText;
-      try {
-        final placemarks = await placemarkFromCoordinates(
-          position.latitude,
-          position.longitude,
-        );
-        if (placemarks.isNotEmpty) {
-          final p = placemarks.first;
-          final parts = <String>[
-            if (p.street != null && p.street!.isNotEmpty) p.street!,
-            if (p.subLocality != null && p.subLocality!.isNotEmpty) p.subLocality!,
-            if (p.locality != null && p.locality!.isNotEmpty) p.locality!,
-            if (p.administrativeArea != null && p.administrativeArea!.isNotEmpty)
-              p.administrativeArea!,
-          ];
-          if (parts.isNotEmpty) addressText = parts.join(', ');
-        }
-      } catch (_) {
-        // Fallback to coords if geocoding fails
-      }
-
-      if (mounted) {
-        setState(() {
-          _address = addressText;
-          _coords = coordsText;
-          _loading = false;
-          _error = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = true;
-          _loading = false;
-          _address = 'Không thể lấy vị trí';
-        });
+    if (!mounted) return;
+    if (confirmed != true) {
+      setState(() => _selected = null);
+    } else {
+      // Dispatch check-in với note loại ngày
+      if (context.mounted) {
+        context.read<AttendanceBloc>().add(
+              AttendanceCheckIn(lateReason: opt.label),
+            );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _fetchLocation,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 24),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.28),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            // Icon
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: _error
-                    ? Colors.red.withValues(alpha: 0.25)
-                    : Colors.white.withValues(alpha: 0.22),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                _error ? Icons.location_off_rounded : Icons.location_on_rounded,
-                color: Colors.white,
-                size: 20,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Label
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 8),
+            child: Text(
+              'Hoặc đăng ký trạng thái ngày',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.75),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
               ),
             ),
-            const SizedBox(width: 10),
-            // Address text
-            Expanded(
-              child: _loading
-                  ? Row(
-                      children: [
-                        SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white.withValues(alpha: 0.8),
-                          ),
+          ),
+          // 3 chip buttons
+          Row(
+            children: List.generate(_options.length, (i) {
+              final opt = _options[i];
+              final isActive = _selected == i;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(right: i < 2 ? 8 : 0),
+                  child: GestureDetector(
+                    onTap: () => _onTap(context, i),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOut,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? opt.color.withValues(alpha: 0.85)
+                            : Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isActive
+                              ? opt.color
+                              : Colors.white.withValues(alpha: 0.28),
+                          width: isActive ? 1.5 : 1,
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Đang lấy vị trí...',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _address,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            opt.icon,
                             color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            height: 1.3,
+                            size: 18,
                           ),
-                        ),
-                        if (_coords.isNotEmpty && !_error) ...[
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 5),
                           Text(
-                            '📍 $_coords',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
+                            opt.label,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
                               fontSize: 10,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w700,
+                              height: 1.2,
                             ),
                           ),
                         ],
-                      ],
+                      ),
                     ),
-            ),
-            // Refresh indicator
-            if (!_loading)
-              Icon(
-                Icons.refresh_rounded,
-                color: Colors.white.withValues(alpha: 0.6),
-                size: 18,
-              ),
-          ],
-        ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _DayTypeOption {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final String description;
+  const _DayTypeOption({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.description,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1369,6 +1407,288 @@ class _ReasonDialogState extends State<_ReasonDialog> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quick Day Type Row – 3 card chấm công nhanh (chỉ hiện khi chưa check-in)
+// ─────────────────────────────────────────────────────────────────────────────
+class _QuickDayTypeRow extends StatelessWidget {
+  const _QuickDayTypeRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          _QuickDayCard(
+            icon: Icons.beach_access_rounded,
+            label: 'Nghỉ phép',
+            sublabel: 'Có lương',
+            color: const Color(0xFF06B6D4),
+            onTap: () => _confirm(
+              context,
+              icon: Icons.beach_access_rounded,
+              title: 'Nghỉ phép hôm nay?',
+              subtitle: 'Ngày ${_todayLabel()} sẽ được ghi nhận là nghỉ phép có lương.',
+              color: const Color(0xFF06B6D4),
+              onConfirm: () => context
+                  .read<AttendanceBloc>()
+                  .add(const AttendanceMarkDayType(
+                      dayType: AttendanceStatus.onLeave)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          _QuickDayCard(
+            icon: Icons.money_off_rounded,
+            label: 'Nghỉ KL',
+            sublabel: 'Không lương',
+            color: const Color(0xFF64748B),
+            onTap: () => _confirm(
+              context,
+              icon: Icons.money_off_rounded,
+              title: 'Nghỉ không lương?',
+              subtitle: 'Ngày ${_todayLabel()} sẽ được ghi nhận là nghỉ không lương.',
+              color: const Color(0xFF64748B),
+              onConfirm: () => context
+                  .read<AttendanceBloc>()
+                  .add(const AttendanceMarkDayType(
+                      dayType: AttendanceStatus.unpaidLeave)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          _QuickDayCard(
+            icon: Icons.home_work_rounded,
+            label: 'WFH',
+            sublabel: 'Làm tại nhà',
+            color: const Color(0xFF10B981),
+            onTap: () => _confirm(
+              context,
+              icon: Icons.home_work_rounded,
+              title: 'Làm việc tại nhà?',
+              subtitle: 'Ngày ${_todayLabel()} sẽ được ghi nhận là Work From Home.',
+              color: const Color(0xFF10B981),
+              onConfirm: () => context
+                  .read<AttendanceBloc>()
+                  .add(const AttendanceMarkDayType(
+                      dayType: AttendanceStatus.workFromHome)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _todayLabel() {
+    final now = DateTime.now();
+    return '${now.day}/${now.month}/${now.year}';
+  }
+
+  void _confirm(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onConfirm,
+  }) {
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 30),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1A1A1A),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF6B7280),
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF6B7280),
+                        side: const BorderSide(color: Color(0xFFE5E7EB)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                      child: const Text('Hủy',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        onConfirm();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: color,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                      child: const Text('Xác nhận',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickDayCard extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final String sublabel;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _QuickDayCard({
+    required this.icon,
+    required this.label,
+    required this.sublabel,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  State<_QuickDayCard> createState() => _QuickDayCardState();
+}
+
+class _QuickDayCardState extends State<_QuickDayCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+      lowerBound: 0.0,
+      upperBound: 0.06,
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.94).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTapDown: (_) => _ctrl.forward(),
+        onTapUp: (_) {
+          _ctrl.reverse();
+          HapticFeedback.lightImpact();
+          widget.onTap();
+        },
+        onTapCancel: () => _ctrl.reverse(),
+        child: ScaleTransition(
+          scale: _scale,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.4),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: widget.color.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    widget.icon,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  widget.sublabel,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -166,14 +166,16 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
       hours = WorkHoursCalculator.calculate(newCheckIn, newCheckOut);
     }
 
-    // Tính lại status flags dựa trên shift
+    // Tính lại status flags dựa trên ca thực tế
+    // actual end = shiftStart + 8h làm + 1.5h nghỉ trưa (ví dụ 8:30 → 18:00)
+    final actualEnd = ShiftParser.actualShiftEnd(shiftStart);
     final isLate = ShiftParser.isLate(newCheckIn, shiftStart);
-    final isEarly = ShiftParser.isEarlyLeave(newCheckOut, shiftEnd);
+    final isEarly = ShiftParser.isEarlyLeave(newCheckOut, actualEnd);
     final primaryStatus = ShiftParser.calculatePrimaryStatus(
       checkIn: newCheckIn,
       checkOut: newCheckOut,
       shiftStart: shiftStart,
-      shiftEnd: shiftEnd,
+      shiftEnd: actualEnd,
     );
 
     final updates = <String, dynamic>{
@@ -217,6 +219,78 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
     required String recordId,
   }) async {
     await _records(userId).doc(recordId).delete();
+  }
+
+  // ──────────────────────────────────────────── submitForgotPunch ──
+
+  @override
+  Future<AttendanceRecord> submitForgotPunch({
+    required String userId,
+    required DateTime date,
+    required DateTime checkIn,
+    required DateTime checkOut,
+    required String reason,
+  }) async {
+    // Khi auto-detect (checkIn == checkOut == date 00:00),
+    // lưu null để UI không hiển thị giờ ảo.
+    final isAutoDetect = checkIn.isAtSameMomentAs(checkOut) &&
+        checkIn.isAtSameMomentAs(date);
+
+    final model = AttendanceRecordModel(
+      id: '',
+      date: DateTime(date.year, date.month, date.day),
+      checkIn: isAutoDetect ? null : checkIn,
+      checkOut: isAutoDetect ? null : checkOut,
+      hoursWorked: 0,
+      status: AttendanceStatus.forgotPunch,
+      note: reason,
+      isLateFlag: false,
+      isEarlyLeaveFlag: false,
+    );
+
+    final ref = await _records(userId).add(model.toFirestore());
+    final snap = await ref.get();
+    return AttendanceRecordModel.fromDoc(snap);
+  }
+
+  // ──────────────────────────────────────────── markDayType ────────
+
+  @override
+  Future<AttendanceRecord> markDayType({
+    required String userId,
+    required AttendanceStatus status,
+  }) async {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    // Kiểm tra nếu đã có record hôm nay → update, ngược lại → tạo mới
+    final existing = await _records(userId)
+        .where('date',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+        .where('date', isLessThan: Timestamp.fromDate(endOfDay))
+        .limit(1)
+        .get();
+
+    if (existing.docs.isNotEmpty) {
+      final docRef = existing.docs.first.reference;
+      await docRef.update({'status': status.name});
+      final updated = await docRef.get();
+      return AttendanceRecordModel.fromDoc(updated);
+    }
+
+    // Tạo record mới
+    final model = AttendanceRecordModel(
+      id: '',
+      date: startOfDay,
+      hoursWorked: 0,
+      status: status,
+      isLateFlag: false,
+      isEarlyLeaveFlag: false,
+    );
+    final ref = await _records(userId).add(model.toFirestore());
+    final snap = await ref.get();
+    return AttendanceRecordModel.fromDoc(snap);
   }
 }
 

@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../domain/entities/attendance_record.dart';
+
 @immutable
 abstract class AttendanceEvent {
   const AttendanceEvent();
@@ -44,4 +46,10 @@ class AttendanceUpdateTime extends AttendanceEvent {
 class AttendanceDeleteRecord extends AttendanceEvent {
   final String recordId;
   const AttendanceDeleteRecord({required this.recordId});
+}
+
+/// Đánh dấu nhanh loại ngày (Nghỉ phép / NKL / WFH).
+class AttendanceMarkDayType extends AttendanceEvent {
+  final AttendanceStatus dayType;
+  const AttendanceMarkDayType({required this.dayType});
 }

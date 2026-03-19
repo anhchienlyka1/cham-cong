@@ -590,6 +590,8 @@ class _DayTileState extends State<_DayTile>
         return (const Color(0xFF8B5CF6), 'Nửa ngày', const Color(0xFF8B5CF6));
       case AttendanceStatus.onLeave:
         return (const Color(0xFF06B6D4), 'Nghỉ phép', const Color(0xFF06B6D4));
+      case AttendanceStatus.unpaidLeave:
+        return (const Color(0xFF64748B), 'KL. Lương', const Color(0xFF64748B));
       case AttendanceStatus.earlyLeave:
         return (const Color(0xFF3B82F6), 'Về sớm', const Color(0xFF3B82F6));
       case AttendanceStatus.sickLeave:

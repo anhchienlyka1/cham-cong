@@ -131,6 +131,7 @@ enum AttendanceStatus {
   late,
   halfDay,
   onLeave,
+  unpaidLeave,
   earlyLeave,
   sickLeave,
   businessTrip,
