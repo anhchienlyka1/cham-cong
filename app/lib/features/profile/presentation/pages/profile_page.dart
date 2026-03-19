@@ -10,8 +10,10 @@ import '../../../../core/services/notification_service.dart';
 import '../../../attendance/domain/utils/shift_parser.dart';
 import '../../../attendance/presentation/bloc/attendance_bloc.dart';
 import '../../../attendance/presentation/bloc/attendance_state.dart';
+import '../../../auth/data/repositories/auth_repository_impl.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../domain/utils/work_duration_calculator.dart';
 import '../widgets/user_avatar_widget.dart';
 import 'attendance_status_settings_page.dart';
 
@@ -156,6 +158,8 @@ class _ProfileBody extends StatelessWidget {
               children: [
                 const SizedBox(height: 24),
                 _buildMonthlyStats(context, state),
+                const SizedBox(height: 16),
+                _WorkDurationCard(user: user),
                 const SizedBox(height: 16),
                 _buildSectionCard(
                   label: 'Thông tin cá nhân',
@@ -925,3 +929,313 @@ class _ShiftPickerSheet extends StatelessWidget {
   }
 }
 
+// ── Work Duration Card — hiển thị thời gian làm việc tại công ty ────────────
+class _WorkDurationCard extends StatelessWidget {
+  final UserEntity? user;
+  const _WorkDurationCard({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final joinDate = user?.joinDate;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: joinDate == null
+            ? _buildSetJoinDate(context)
+            : _buildDurationDisplay(context, joinDate),
+      ),
+    );
+  }
+
+  /// Nút "Nhập ngày vào công ty" khi chưa có joinDate
+  Widget _buildSetJoinDate(BuildContext context) {
+    return InkWell(
+      onTap: () => _pickJoinDate(context, null),
+      borderRadius: BorderRadius.circular(16),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF4845F), Color(0xFFE8601C)],
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.date_range_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Thời gian làm việc',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Nhập ngày vào công ty để bắt đầu đếm',
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.add_circle_outline_rounded, color: AppColors.primary, size: 24),
+        ],
+      ),
+    );
+  }
+
+  /// Hiển thị thời gian làm việc khi đã có joinDate
+  Widget _buildDurationDisplay(BuildContext context, DateTime joinDate) {
+    final now = DateTime.now();
+    final duration = WorkDurationCalculator.calculate(joinDate, now);
+    final totalMonths = duration.years * 12 + duration.months;
+    final nextMilestone = WorkDurationCalculator.nextMilestone(duration.years);
+    final milestoneMonths = nextMilestone * 12;
+    final progress = milestoneMonths > 0
+        ? (totalMonths / milestoneMonths).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Row(
+          children: [
+            Container(
+              width: 3,
+              height: 14,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFF07030), Color(0xFFE8601C)],
+                ),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Thời gian làm việc',
+              style: AppTextStyles.labelLarge.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Spacer(),
+            GestureDetector(
+              onTap: () => _pickJoinDate(context, joinDate),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.edit_rounded, size: 12, color: AppColors.primary),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Sửa',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Duration numbers
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _DurationUnit(
+              value: duration.years,
+              label: 'Năm',
+              color: const Color(0xFFE8601C),
+            ),
+            _DurationUnit(
+              value: duration.months,
+              label: 'Tháng',
+              color: const Color(0xFFF4845F),
+            ),
+            _DurationUnit(
+              value: duration.days,
+              label: 'Ngày',
+              color: const Color(0xFFFB923C),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Progress toward next milestone
+        Row(
+          children: [
+            Text(
+              'Milestone: $nextMilestone năm',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textHint,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '${(progress * 100).toStringAsFixed(0)}%',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 6,
+            backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // Join date info
+        Text(
+          'Ngày vào công ty: ${joinDate.day}/${joinDate.month}/${joinDate.year}',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textHint,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Mở DatePicker để chọn/sửa ngày vào công ty
+  Future<void> _pickJoinDate(BuildContext context, DateTime? current) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? DateTime.now(),
+      firstDate: DateTime(1990),
+      lastDate: DateTime.now(),
+      helpText: 'Chọn ngày vào công ty',
+      cancelText: 'Huỷ',
+      confirmText: 'Xác nhận',
+      builder: (ctx, child) {
+        return Theme(
+          data: Theme.of(ctx).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.primary,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked == null || !context.mounted) return;
+
+    // Lưu lên Firestore
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      final repo = FirebaseAuthRepositoryImpl(
+        auth: FirebaseAuth.instance,
+        db: FirebaseFirestore.instance,
+      );
+      await repo.updateJoinDate(userId: uid, joinDate: picked);
+    }
+
+    // Cập nhật state
+    if (context.mounted) {
+      context.read<AuthBloc>().add(AuthJoinDateUpdated(joinDate: picked));
+    }
+  }
+}
+
+// ── Duration Unit widget ─────────────────────────────────────────────────────
+class _DurationUnit extends StatelessWidget {
+  final int value;
+  final String label;
+  final Color color;
+
+  const _DurationUnit({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: color.withValues(alpha: 0.2),
+              width: 1.5,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              '$value',
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                color: color,
+                height: 1.0,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+}

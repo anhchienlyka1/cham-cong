@@ -37,3 +37,13 @@ class AuthShiftUpdated extends AuthEvent {
   @override
   List<Object?> get props => [shift];
 }
+
+/// Event cập nhật ngày vào công ty cho user trong state
+class AuthJoinDateUpdated extends AuthEvent {
+  final DateTime joinDate;
+
+  const AuthJoinDateUpdated({required this.joinDate});
+
+  @override
+  List<Object?> get props => [joinDate];
+}

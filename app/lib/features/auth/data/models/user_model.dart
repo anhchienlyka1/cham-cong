@@ -14,6 +14,7 @@ class UserModel extends UserEntity {
     super.workLocation,
     super.shift,
     super.createdAt,
+    super.joinDate,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -31,6 +32,9 @@ class UserModel extends UserEntity {
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : null,
+      joinDate: json['join_date'] != null
+          ? DateTime.parse(json['join_date'] as String)
+          : null,
     );
   }
 
@@ -47,6 +51,7 @@ class UserModel extends UserEntity {
       'work_location': workLocation,
       'shift': shift,
       'created_at': createdAt?.toIso8601String(),
+      'join_date': joinDate?.toIso8601String(),
     };
   }
 }

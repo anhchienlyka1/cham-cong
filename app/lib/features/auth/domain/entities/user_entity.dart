@@ -13,6 +13,7 @@ class UserEntity extends Equatable {
   final String? workLocation;
   final String? shift;
   final DateTime? createdAt;
+  final DateTime? joinDate;
 
   const UserEntity({
     required this.id,
@@ -26,6 +27,7 @@ class UserEntity extends Equatable {
     this.workLocation,
     this.shift,
     this.createdAt,
+    this.joinDate,
   });
 
   /// Tạo bản sao UserEntity với các trường được cập nhật
@@ -41,6 +43,7 @@ class UserEntity extends Equatable {
     String? workLocation,
     String? shift,
     DateTime? createdAt,
+    DateTime? joinDate,
   }) {
     return UserEntity(
       id: id ?? this.id,
@@ -54,6 +57,7 @@ class UserEntity extends Equatable {
       workLocation: workLocation ?? this.workLocation,
       shift: shift ?? this.shift,
       createdAt: createdAt ?? this.createdAt,
+      joinDate: joinDate ?? this.joinDate,
     );
   }
 
@@ -70,5 +74,6 @@ class UserEntity extends Equatable {
         workLocation,
         shift,
         createdAt,
+        joinDate,
       ];
 }

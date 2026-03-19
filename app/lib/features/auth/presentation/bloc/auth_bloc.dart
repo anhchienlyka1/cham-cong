@@ -27,6 +27,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLogoutRequested>(_onLogoutRequested);
     on<AuthCheckStatusRequested>(_onCheckStatus);
     on<AuthShiftUpdated>(_onShiftUpdated);
+    on<AuthJoinDateUpdated>(_onJoinDateUpdated);
   }
 
   Future<void> _onLoginRequested(
@@ -108,6 +109,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     if (currentUser == null) return;
 
     final updatedUser = currentUser.copyWith(shift: event.shift);
+    emit(state.copyWith(user: updatedUser));
+  }
+
+  /// Cập nhật ngày vào công ty trong user state
+  void _onJoinDateUpdated(
+    AuthJoinDateUpdated event,
+    Emitter<AuthState> emit,
+  ) {
+    final currentUser = state.user;
+    if (currentUser == null) return;
+
+    final updatedUser = currentUser.copyWith(joinDate: event.joinDate);
     emit(state.copyWith(user: updatedUser));
   }
 }

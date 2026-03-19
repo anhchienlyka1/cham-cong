@@ -676,22 +676,27 @@ class _ActionZoneState extends State<_ActionZone> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final available = constraints.maxHeight - (notStarted ? 100.0 : 0.0);
-        final btnSize = available.clamp(140.0, 200.0);
+        final quickRowSpace = notStarted ? 130.0 : 0.0;
+        final available = constraints.maxHeight - quickRowSpace;
+        final btnSize = available.clamp(120.0, 200.0);
 
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _MainCheckButton(
-              size: btnSize,
-              isDone: isDone,
-              isWorking: isWorking,
-              onTap: () => _handleMainButton(context),
-            ),
-            // 3 card nhanh – hiện khi chưa check-in
-            if (notStarted) const SizedBox(height: 20),
-            if (notStarted) const _QuickDayTypeRow(),
-          ],
+        return SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _MainCheckButton(
+                size: btnSize,
+                isDone: isDone,
+                isWorking: isWorking,
+                onTap: () => _handleMainButton(context),
+              ),
+              // 3 card nhanh – hiện khi chưa check-in
+              if (notStarted) const SizedBox(height: 16),
+              if (notStarted) const _QuickDayTypeRow(),
+            ],
+          ),
         );
       },
     );

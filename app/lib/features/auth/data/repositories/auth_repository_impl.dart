@@ -151,6 +151,7 @@ class FirebaseAuthRepositoryImpl implements AuthRepository {
     String? workLocation;
     String? shift;
     DateTime? createdAt;
+    DateTime? joinDate;
 
     // Lấy thêm thông tin từ Firestore nếu có
     try {
@@ -167,6 +168,10 @@ class FirebaseAuthRepositoryImpl implements AuthRepository {
         final ts = data['createdAt'];
         if (ts is Timestamp) {
           createdAt = ts.toDate();
+        }
+        final jd = data['joinDate'];
+        if (jd is Timestamp) {
+          joinDate = jd.toDate();
         }
       }
     } catch (_) {
@@ -185,6 +190,7 @@ class FirebaseAuthRepositoryImpl implements AuthRepository {
       workLocation: workLocation,
       shift: shift,
       createdAt: createdAt,
+      joinDate: joinDate,
     );
   }
 
@@ -211,5 +217,16 @@ class FirebaseAuthRepositoryImpl implements AuthRepository {
       default:
         return 'Đã xảy ra lỗi: $code';
     }
+  }
+
+  /// Cập nhật ngày vào công ty (joinDate) trên Firestore.
+  Future<void> updateJoinDate({
+    required String userId,
+    required DateTime joinDate,
+  }) async {
+    await _db.collection('users').doc(userId).set(
+      {'joinDate': Timestamp.fromDate(joinDate)},
+      SetOptions(merge: true),
+    );
   }
 }
