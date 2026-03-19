@@ -41,3 +41,7 @@ class AttendanceUpdateTime extends AttendanceEvent {
   });
 }
 
+class AttendanceDeleteRecord extends AttendanceEvent {
+  final String recordId;
+  const AttendanceDeleteRecord({required this.recordId});
+}

@@ -7,6 +7,7 @@ import '../../domain/usecases/check_in_usecase.dart';
 import '../../domain/usecases/check_out_usecase.dart';
 import '../../domain/usecases/get_attendance_history_usecase.dart';
 import '../../domain/usecases/get_today_record_usecase.dart';
+import '../../domain/usecases/delete_attendance_usecase.dart';
 import '../../domain/usecases/update_attendance_time_usecase.dart';
 import '../../domain/utils/shift_parser.dart';
 import 'attendance_event.dart';
@@ -18,6 +19,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
   final GetAttendanceHistoryUseCase _getHistoryUseCase;
   final GetTodayRecordUseCase _getTodayRecordUseCase;
   final UpdateAttendanceTimeUseCase _updateTimeUseCase;
+  final DeleteAttendanceUseCase _deleteUseCase;
   final AuthBloc _authBloc;
 
   AttendanceBloc({
@@ -26,18 +28,21 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     required GetAttendanceHistoryUseCase getHistoryUseCase,
     required GetTodayRecordUseCase getTodayRecordUseCase,
     required UpdateAttendanceTimeUseCase updateTimeUseCase,
+    required DeleteAttendanceUseCase deleteUseCase,
     required AuthBloc authBloc,
   })  : _checkInUseCase = checkInUseCase,
         _checkOutUseCase = checkOutUseCase,
         _getHistoryUseCase = getHistoryUseCase,
         _getTodayRecordUseCase = getTodayRecordUseCase,
         _updateTimeUseCase = updateTimeUseCase,
+        _deleteUseCase = deleteUseCase,
         _authBloc = authBloc,
         super(const AttendanceState()) {
     on<AttendanceCheckIn>(_onCheckIn);
     on<AttendanceCheckOut>(_onCheckOut);
     on<AttendanceLoadHistory>(_onLoadHistory);
     on<AttendanceUpdateTime>(_onUpdateTime);
+    on<AttendanceDeleteRecord>(_onDeleteRecord);
   }
 
   String get _userId => FirebaseAuth.instance.currentUser!.uid;
@@ -215,6 +220,47 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       emit(state.copyWith(
         status: AttendancePageStatus.error,
         errorMessage: 'Cập nhật thất bại: $e',
+      ));
+    }
+  }
+
+  // ── Delete record ───────────────────────────────────────────────
+  Future<void> _onDeleteRecord(
+    AttendanceDeleteRecord event,
+    Emitter<AttendanceState> emit,
+  ) async {
+    try {
+      await _deleteUseCase(
+        userId: _userId,
+        recordId: event.recordId,
+      );
+
+      // Xoá khỏi history
+      final updatedHistory =
+          state.history.where((r) => r.id != event.recordId).toList();
+
+      // Clear todayRecord nếu trùng id
+      final newTodayRecord =
+          state.todayRecord?.id == event.recordId ? null : state.todayRecord;
+
+      // Tính lại tổng giờ và số ngày
+      double monthlyHours = 0;
+      int workingDays = 0;
+      for (final r in updatedHistory) {
+        if (r.hoursWorked != null) monthlyHours += r.hoursWorked!;
+        if (r.isActiveWorkDay) workingDays++;
+      }
+
+      emit(state.copyWith(
+        todayRecord: newTodayRecord,
+        history: updatedHistory,
+        monthlyHours: monthlyHours,
+        workingDays: workingDays,
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        status: AttendancePageStatus.error,
+        errorMessage: 'Xoá thất bại: $e',
       ));
     }
   }

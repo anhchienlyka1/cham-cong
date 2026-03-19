@@ -208,5 +208,15 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
     final updated = await ref.get();
     return AttendanceRecordModel.fromDoc(updated);
   }
+
+  // ──────────────────────────────────────────── deleteRecord ────
+
+  @override
+  Future<void> deleteRecord({
+    required String userId,
+    required String recordId,
+  }) async {
+    await _records(userId).doc(recordId).delete();
+  }
 }
 

@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../config/themes/app_colors.dart';
 import '../../domain/entities/attendance_record.dart';
 import '../bloc/attendance_bloc.dart';
+import '../bloc/attendance_event.dart';
 import '../bloc/attendance_state.dart';
 import '../widgets/edit_time_sheet.dart';
 
@@ -459,6 +460,22 @@ class _DayList extends StatelessWidget {
                       color: Color(0xFF6B7280),
                     ),
                   ),
+                  const Spacer(),
+                  const Row(
+                    children: [
+                      Icon(Icons.swipe_left_rounded,
+                          size: 13, color: Color(0xFFBEC3CB)),
+                      SizedBox(width: 3),
+                      Text(
+                        'Vuốt để xóa',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFFBEC3CB),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -473,8 +490,14 @@ class _DayList extends StatelessWidget {
                 color: Color(0xFFF3F4F6),
               ),
               itemBuilder: (ctx, i) => _DayTile(
+                key: ValueKey(records[i].id),
                 record: records[i],
                 onTap: () => _openEditSheet(ctx, records[i]),
+                onDelete: () {
+                  ctx.read<AttendanceBloc>().add(
+                        AttendanceDeleteRecord(recordId: records[i].id),
+                      );
+                },
               ),
             ),
             const SizedBox(height: 8),
@@ -497,161 +520,63 @@ void _openEditSheet(BuildContext context, AttendanceRecord record) {
   );
 }
 
-class _DayTile extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+// Day Tile – swipe left to reveal delete button
+// ─────────────────────────────────────────────────────────────────────────────
+class _DayTile extends StatefulWidget {
   final AttendanceRecord record;
   final VoidCallback? onTap;
+  final VoidCallback? onDelete;
 
-  const _DayTile({required this.record, this.onTap});
+  const _DayTile({
+    super.key,
+    required this.record,
+    this.onTap,
+    this.onDelete,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final (accentColor, _, __) = _statusInfo(record.status);
+  State<_DayTile> createState() => _DayTileState();
+}
 
-    // Format hours
-    String hoursLabel = '0h';
-    if (record.hoursWorked != null && record.hoursWorked! > 0) {
-      final h = record.hoursWorked!.floor();
-      final m = ((record.hoursWorked! - h) * 60).round();
-      hoursLabel = m > 0 ? '${h}h ${m}m' : '${h}h';
-    }
+class _DayTileState extends State<_DayTile>
+    with SingleTickerProviderStateMixin {
+  static const double _deleteWidth = 76;
+  static const double _triggerThreshold = 40;
 
-    // Status badges
-    final badges = <Widget>[];
-    if (record.isLateFlag) {
-      badges.add(_buildBadge('Muộn', const Color(0xFFF59E0B)));
-    }
-    if (record.isEarlyLeaveFlag) {
-      badges.add(_buildBadge('Về sớm', const Color(0xFF3B82F6)));
-    }
-    if (badges.isEmpty) {
-      final (_, badgeLabel, badgeColor) = _statusInfo(record.status);
-      badges.add(_buildBadge(badgeLabel, badgeColor));
-    }
+  double _offset = 0; // âm = vuốt sang trái
+  late final AnimationController _ctrl;
+  Animation<double>? _snapAnim;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      splashColor: accentColor.withValues(alpha: 0.08),
-      highlightColor: accentColor.withValues(alpha: 0.04),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 4,
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: accentColor,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Row(
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            record.dayOfWeek,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1A1A2E),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${record.date.day}/${record.date.month}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF6B7280),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Spacer(),
-                      Row(
-                        children: [
-                          _TimeChip(
-                            icon: Icons.login_rounded,
-                            time: record.formattedCheckIn,
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 4),
-                            child: Icon(
-                              Icons.arrow_forward_rounded,
-                              size: 12,
-                              color: Color(0xFFD1D5DB),
-                            ),
-                          ),
-                          _TimeChip(
-                            icon: Icons.logout_rounded,
-                            time: record.formattedCheckOut,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 8),
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            hoursLabel,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1A1A2E),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 4,
-                            runSpacing: 2,
-                            alignment: WrapAlignment.end,
-                            children: badges,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 6),
-                      const Icon(
-                        Icons.chevron_right_rounded,
-                        size: 16,
-                        color: Color(0xFFD1D5DB),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 260));
   }
 
-  Widget _buildBadge(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
   }
+
+  bool get _isOpen => _offset <= -_deleteWidth + 4;
+
+  void _snapTo(double target) {
+    _ctrl.stop();
+    _snapAnim = Tween<double>(begin: _offset, end: target)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut))
+      ..addListener(() {
+        if (mounted) setState(() => _offset = _snapAnim!.value);
+      });
+    _ctrl
+      ..reset()
+      ..forward();
+  }
+
+  void _open() => _snapTo(-_deleteWidth);
+  void _close() => _snapTo(0);
 
   (Color, String, Color) _statusInfo(AttendanceStatus status) {
     switch (status) {
@@ -680,6 +605,232 @@ class _DayTile extends StatelessWidget {
       case AttendanceStatus.forgotPunch:
         return (const Color(0xFF6B7280), 'Quên CC', const Color(0xFF6B7280));
     }
+  }
+
+  Widget _buildBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final record = widget.record;
+    final (accentColor, _, __) = _statusInfo(record.status);
+
+    // Format hours
+    String hoursLabel = '0h';
+    if (record.hoursWorked != null && record.hoursWorked! > 0) {
+      final h = record.hoursWorked!.floor();
+      final m = ((record.hoursWorked! - h) * 60).round();
+      hoursLabel = m > 0 ? '${h}h ${m}m' : '${h}h';
+    }
+
+    // Status badges
+    final badges = <Widget>[];
+    if (record.isLateFlag) badges.add(_buildBadge('Muộn', const Color(0xFFF59E0B)));
+    if (record.isEarlyLeaveFlag) badges.add(_buildBadge('Về sớm', const Color(0xFF3B82F6)));
+    if (badges.isEmpty) {
+      final (_, badgeLabel, badgeColor) = _statusInfo(record.status);
+      badges.add(_buildBadge(badgeLabel, badgeColor));
+    }
+
+    // Tỉ lệ mở (0 → 1) để fade nút xóa
+    final revealRatio = (-_offset / _deleteWidth).clamp(0.0, 1.0);
+
+    return ClipRect(
+      child: GestureDetector(
+        onHorizontalDragUpdate: (d) {
+          setState(() {
+            _offset = (_offset + d.delta.dx).clamp(-_deleteWidth * 1.05, 0.0);
+          });
+        },
+        onHorizontalDragEnd: (d) {
+          final px = d.velocity.pixelsPerSecond.dx;
+          if (px < -400 || _offset < -_triggerThreshold) {
+            _open();
+          } else {
+            _close();
+          }
+        },
+        child: Stack(
+          children: [
+            // ── Nền đỏ (nút Xóa) ─────────────────────────────────────
+            Positioned.fill(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.mediumImpact();
+                    _close();
+                    widget.onDelete?.call();
+                  },
+                  child: Container(
+                    width: _deleteWidth,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFFFF4C5B), Color(0xFFD32F2F)],
+                      ),
+                    ),
+                    child: Opacity(
+                      opacity: revealRatio,
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.delete_rounded,
+                              color: Colors.white, size: 22),
+                          SizedBox(height: 3),
+                          Text(
+                            'Xóa',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Foreground (nội dung dòng) ────────────────────────────
+            Transform.translate(
+              offset: Offset(_offset, 0),
+              child: Container(
+                color: Colors.white,
+                child: InkWell(
+                  onTap: _isOpen ? _close : widget.onTap,
+                  splashColor: accentColor.withValues(alpha: 0.08),
+                  highlightColor: accentColor.withValues(alpha: 0.04),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 2),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            width: 4,
+                            margin:
+                                const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: accentColor,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12),
+                              child: Row(
+                                children: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        record.dayOfWeek,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1A1A2E),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${record.date.day}/${record.date.month}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const Spacer(),
+                                  Row(
+                                    children: [
+                                      _TimeChip(
+                                        icon: Icons.login_rounded,
+                                        time: record.formattedCheckIn,
+                                      ),
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 4),
+                                        child: Icon(
+                                          Icons.arrow_forward_rounded,
+                                          size: 12,
+                                          color: Color(0xFFD1D5DB),
+                                        ),
+                                      ),
+                                      _TimeChip(
+                                        icon: Icons.logout_rounded,
+                                        time: record.formattedCheckOut,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        hoursLabel,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF1A1A2E),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Wrap(
+                                        spacing: 4,
+                                        runSpacing: 2,
+                                        alignment: WrapAlignment.end,
+                                        children: badges,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 16,
+                                    color: Color(0xFFD1D5DB),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

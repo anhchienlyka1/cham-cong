@@ -42,5 +42,11 @@ abstract class AttendanceRepository {
     TimeOfDay shiftStart = const TimeOfDay(hour: 8, minute: 30),
     TimeOfDay shiftEnd = const TimeOfDay(hour: 17, minute: 30),
   });
+
+  /// Xoá một record khỏi Firestore.
+  Future<void> deleteRecord({
+    required String userId,
+    required String recordId,
+  });
 }
 
