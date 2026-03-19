@@ -80,8 +80,10 @@ class FirebaseAuthRepositoryImpl implements AuthRepository {
       await fbUser.updateDisplayName(fullName);
 
       // Lưu profile vào Firestore
+      final username = email.split('@').first;
       await _db.collection('users').doc(fbUser.uid).set({
         'email': email,
+        'username': username,
         'fullName': fullName,
         'phoneNumber': null,
         'employeeId': null,

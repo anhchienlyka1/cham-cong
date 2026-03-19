@@ -4,7 +4,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../app/dependency_injection.dart';
 import '../../../../config/routes/route_names.dart';
 import '../../../../config/themes/app_colors.dart';
 import '../../../../config/themes/app_text_styles.dart';
@@ -15,10 +14,9 @@ class LoginPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => sl<AuthBloc>(),
-      child: const _LoginView(),
-    );
+    // AuthBloc đã được provide ở root (App widget),
+    // không cần tạo BlocProvider mới ở đây.
+    return const _LoginView();
   }
 }
 

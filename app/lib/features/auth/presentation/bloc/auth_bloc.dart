@@ -25,9 +25,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLogoutRequested>(_onLogoutRequested);
     on<AuthCheckStatusRequested>(_onCheckStatus);
     on<AuthShiftUpdated>(_onShiftUpdated);
-
-    // Tự động load thông tin user từ Firestore khi bloc được tạo
-    add(const AuthCheckStatusRequested());
   }
 
   Future<void> _onLoginRequested(

@@ -4,8 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/dependency_injection.dart';
 import '../../features/attendance/presentation/bloc/attendance_bloc.dart';
-import '../../features/attendance/presentation/pages/attendance_stats_page.dart';
-import '../../features/auth/presentation/bloc/auth_bloc.dart';
+
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import 'route_names.dart';
@@ -36,20 +35,9 @@ class AppRouter {
       GoRoute(
         path: RouteNames.home,
         name: 'home',
-        builder: (context, state) => MultiBlocProvider(
-          providers: [
-            BlocProvider(create: (_) => sl<AuthBloc>()),
-            BlocProvider(create: (_) => sl<AttendanceBloc>()),
-          ],
-          child: const HomePage(),
-        ),
-      ),
-      GoRoute(
-        path: RouteNames.attendanceStats,
-        name: 'attendanceStats',
         builder: (context, state) => BlocProvider(
           create: (_) => sl<AttendanceBloc>(),
-          child: const AttendanceStatsPage(),
+          child: const HomePage(),
         ),
       ),
     ],
