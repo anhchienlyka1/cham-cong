@@ -1,4 +1,5 @@
 import 'package:get_it/get_it.dart';
+import '../core/services/widget_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -23,6 +24,10 @@ import '../features/attendance/presentation/bloc/attendance_bloc.dart';
 final sl = GetIt.instance;
 
 Future<void> configureDependencies() async {
+  // ── Widget Service ───────────────────────────────────────────────
+  sl.registerLazySingleton(() => WidgetService());
+  await sl<WidgetService>().initialize();
+
   // ── Firebase services ────────────────────────────────────────────
   sl.registerLazySingleton<FirebaseAuth>(() => FirebaseAuth.instance);
   sl.registerLazySingleton<FirebaseFirestore>(() => FirebaseFirestore.instance);
@@ -76,6 +81,7 @@ Future<void> configureDependencies() async {
       forgotPunchUseCase: sl<SubmitForgotPunchUseCase>(),
       markDayTypeUseCase: sl<MarkDayTypeUseCase>(),
       authBloc: sl<AuthBloc>(),
+      widgetService: sl<WidgetService>(),
     ),
   );
 }

@@ -12,6 +12,7 @@ import '../../domain/usecases/update_attendance_time_usecase.dart';
 import '../../domain/usecases/submit_forgot_punch_usecase.dart';
 import '../../domain/usecases/mark_day_type_usecase.dart';
 import '../../domain/utils/shift_parser.dart';
+import '../../../../core/services/widget_service.dart';
 import 'attendance_event.dart';
 import 'attendance_state.dart';
 
@@ -25,6 +26,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
   final SubmitForgotPunchUseCase _forgotPunchUseCase;
   final MarkDayTypeUseCase _markDayTypeUseCase;
   final AuthBloc _authBloc;
+  final WidgetService _widgetService;
 
   AttendanceBloc({
     required CheckInUseCase checkInUseCase,
@@ -36,6 +38,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     required SubmitForgotPunchUseCase forgotPunchUseCase,
     required MarkDayTypeUseCase markDayTypeUseCase,
     required AuthBloc authBloc,
+    required WidgetService widgetService,
   })  : _checkInUseCase = checkInUseCase,
         _checkOutUseCase = checkOutUseCase,
         _getHistoryUseCase = getHistoryUseCase,
@@ -45,6 +48,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         _forgotPunchUseCase = forgotPunchUseCase,
         _markDayTypeUseCase = markDayTypeUseCase,
         _authBloc = authBloc,
+        _widgetService = widgetService,
         super(const AttendanceState()) {
     on<AttendanceCheckIn>(_onCheckIn);
     on<AttendanceCheckOut>(_onCheckOut);
@@ -100,6 +104,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         lateReason: event.lateReason,
       );
       emit(_syncRecordToHistory(state, record));
+      _widgetService.updateTodayAttendance(record);
     } catch (e) {
       emit(state.copyWith(
         status: AttendancePageStatus.error,
@@ -123,6 +128,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         earlyLeaveReason: event.earlyLeaveReason,
       );
       emit(_syncRecordToHistory(state, record));
+      _widgetService.updateTodayAttendance(record);
     } catch (e) {
       emit(state.copyWith(
         status: AttendancePageStatus.error,
@@ -179,6 +185,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         monthlyHours: monthlyHours,
         workingDays: workingDays,
       ));
+      _widgetService.updateTodayAttendance(todayRecord);
     } catch (e) {
       emit(state.copyWith(
         status: AttendancePageStatus.error,
