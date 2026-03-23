@@ -18,7 +18,12 @@ class AttendanceCheckService {
 
   // ── Check-in ────────────────────────────────────────────────────────────────
   /// Gọi từ background task check-in (khoảng 8:25 sáng).
+  /// Không gửi thông báo vào thứ 7 và chủ nhật.
   Future<void> runCheckInCheck() async {
+    // Bỏ qua cuối tuần (thứ 7 = 6, chủ nhật = 7)
+    final weekday = DateTime.now().weekday;
+    if (weekday == DateTime.saturday || weekday == DateTime.sunday) return;
+
     final prefs = await SharedPreferences.getInstance();
 
     // Reset flag nếu sang ngày mới
@@ -43,7 +48,12 @@ class AttendanceCheckService {
 
   // ── Check-out ───────────────────────────────────────────────────────────────
   /// Gọi từ background task check-out (khoảng 17:25 chiều).
+  /// Không gửi thông báo vào thứ 7 và chủ nhật.
   Future<void> runCheckOutCheck() async {
+    // Bỏ qua cuối tuần (thứ 7 = 6, chủ nhật = 7)
+    final weekday = DateTime.now().weekday;
+    if (weekday == DateTime.saturday || weekday == DateTime.sunday) return;
+
     final prefs = await SharedPreferences.getInstance();
 
     final lastDate = prefs.getString(AppConstants.prefLastCheckoutDate);

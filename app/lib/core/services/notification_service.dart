@@ -178,10 +178,17 @@ class NotificationService {
     return (total ~/ 60, total % 60);
   }
 
+  /// Tìm thời điểm tiếp theo để kích hoạt notification.
+  /// Bỏ qua thứ 7 (Saturday) và chủ nhật (Sunday) — ngày nghỉ cuối tuần.
   static tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
     final now = tz.TZDateTime.now(tz.local);
     var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
     if (scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    // Bỏ qua cuối tuần: dịch sang thứ 2 nếu rơi vào thứ 7 hoặc chủ nhật
+    while (scheduled.weekday == DateTime.saturday ||
+        scheduled.weekday == DateTime.sunday) {
       scheduled = scheduled.add(const Duration(days: 1));
     }
     return scheduled;

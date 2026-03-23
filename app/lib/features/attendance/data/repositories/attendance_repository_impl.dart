@@ -213,12 +213,61 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
 
   // ──────────────────────────────────────────── deleteRecord ────
 
+  CollectionReference<Map<String, dynamic>> _deletedDays(String userId) =>
+      _db.collection('attendance').doc(userId).collection('deletedDays');
+
   @override
   Future<void> deleteRecord({
     required String userId,
     required String recordId,
   }) async {
+    // Lấy thông tin record để biết ngày trước khi xoá
+    final snap = await _records(userId).doc(recordId).get();
+
+    // Xoá document chính trên Firestore
     await _records(userId).doc(recordId).delete();
+
+    // Nếu record tồn tại, đánh dấu ngày đó đã bị xoá thủ công
+    // để tránh auto-detect tạo lại forgotPunch
+    if (snap.exists) {
+      final data = snap.data();
+      final dateTs = data?['date'];
+      if (dateTs is Timestamp) {
+        final date = dateTs.toDate();
+        final dateKey =
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        await _deletedDays(userId).doc(dateKey).set({
+          'deletedAt': FieldValue.serverTimestamp(),
+          'originalRecordId': recordId,
+        });
+      }
+    }
+  }
+
+  /// Lấy danh sách các ngày đã bị xoá thủ công trong tháng [month]/[year].
+  Future<Set<DateTime>> getDeletedDays({
+    required String userId,
+    required int month,
+    required int year,
+  }) async {
+    final prefix = '$year-${month.toString().padLeft(2, '0')}';
+    try {
+      final snap = await _deletedDays(userId)
+          .where(FieldPath.documentId, isGreaterThanOrEqualTo: prefix)
+          .where(FieldPath.documentId, isLessThan: '${prefix}z')
+          .get()
+          .timeout(const Duration(seconds: 5));
+      return snap.docs.map((doc) {
+        final parts = doc.id.split('-');
+        return DateTime(
+          int.parse(parts[0]),
+          int.parse(parts[1]),
+          int.parse(parts[2]),
+        );
+      }).toSet();
+    } catch (_) {
+      return {};
+    }
   }
 
   // ──────────────────────────────────────────── submitForgotPunch ──

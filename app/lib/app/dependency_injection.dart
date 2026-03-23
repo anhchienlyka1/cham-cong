@@ -80,6 +80,7 @@ Future<void> configureDependencies() async {
       deleteUseCase: sl<DeleteAttendanceUseCase>(),
       forgotPunchUseCase: sl<SubmitForgotPunchUseCase>(),
       markDayTypeUseCase: sl<MarkDayTypeUseCase>(),
+      repository: sl<AttendanceRepository>(),
       authBloc: sl<AuthBloc>(),
       widgetService: sl<WidgetService>(),
     ),

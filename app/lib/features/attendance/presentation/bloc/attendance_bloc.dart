@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../domain/entities/attendance_record.dart';
+import '../../domain/repositories/attendance_repository.dart';
 import '../../domain/usecases/check_in_usecase.dart';
 import '../../domain/usecases/check_out_usecase.dart';
 import '../../domain/usecases/get_attendance_history_usecase.dart';
@@ -25,6 +26,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
   final DeleteAttendanceUseCase _deleteUseCase;
   final SubmitForgotPunchUseCase _forgotPunchUseCase;
   final MarkDayTypeUseCase _markDayTypeUseCase;
+  final AttendanceRepository _repository;
   final AuthBloc _authBloc;
   final WidgetService _widgetService;
 
@@ -37,6 +39,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     required DeleteAttendanceUseCase deleteUseCase,
     required SubmitForgotPunchUseCase forgotPunchUseCase,
     required MarkDayTypeUseCase markDayTypeUseCase,
+    required AttendanceRepository repository,
     required AuthBloc authBloc,
     required WidgetService widgetService,
   })  : _checkInUseCase = checkInUseCase,
@@ -47,6 +50,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         _deleteUseCase = deleteUseCase,
         _forgotPunchUseCase = forgotPunchUseCase,
         _markDayTypeUseCase = markDayTypeUseCase,
+        _repository = repository,
         _authBloc = authBloc,
         _widgetService = widgetService,
         super(const AttendanceState()) {
@@ -154,15 +158,22 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
           month: now.month,
           year: now.year,
         ),
+        // Lấy danh sách ngày đã bị xoá thủ công để bỏ qua khi auto-detect
+        _repository.getDeletedDays(
+          userId: _userId,
+          month: now.month,
+          year: now.year,
+        ),
       ]);
 
       final todayRecord = results[0] as AttendanceRecord?;
       var history = results[1] as List<AttendanceRecord>;
+      final deletedDays = results[2] as Set<DateTime>;
 
-      // ── Auto-detect forgot punch ──────────────────────────────────
+      // ── Auto-detect forgot punch ────────────────────────────
       // Quét các ngày làm việc từ đầu tháng đến hôm qua.
-      // Nếu ngày nào không có record → tự tạo forgotPunch.
-      final missingDays = _findMissingWorkDays(history, now);
+      // Nếu ngày nào không có record VÀ chưa bị xoá thủ công → tự tạo forgotPunch.
+      final missingDays = _findMissingWorkDays(history, now, deletedDays);
       if (missingDays.isNotEmpty) {
         final newRecords = await _autoMarkForgotPunch(missingDays);
         if (newRecords.isNotEmpty) {
@@ -195,10 +206,11 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
   }
 
   /// Tìm các ngày làm việc (T2–T6) từ ngày 1 đến hôm qua
-  /// mà chưa có record nào trong [history].
+  /// mà chưa có record nào trong [history] và chưa bị xoá thủ công.
   List<DateTime> _findMissingWorkDays(
     List<AttendanceRecord> history,
     DateTime now,
+    Set<DateTime> deletedDays,
   ) {
     // Tập ngày đã có record (chỉ giữ ngày, bỏ giờ)
     final recorded = history
@@ -217,7 +229,8 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       final isWeekend = cursor.weekday == DateTime.saturday ||
           cursor.weekday == DateTime.sunday;
       final dateOnly = DateTime(cursor.year, cursor.month, cursor.day);
-      if (!isWeekend && !recorded.contains(dateOnly)) {
+      // Bỏ qua cuối tuần, ngày đã có record, và ngày đã bị xoá thủ công
+      if (!isWeekend && !recorded.contains(dateOnly) && !deletedDays.contains(dateOnly)) {
         missing.add(dateOnly);
       }
       cursor = cursor.add(const Duration(days: 1));
